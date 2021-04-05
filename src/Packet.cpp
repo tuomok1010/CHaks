@@ -18,7 +18,7 @@ PacketCraft::Packet::Packet():
 {
     for(int i = 0; i < PC_MAX_LAYERS; ++i)
     {
-        layerInfos[i].type = PC_UNINIT;
+        layerInfos[i].type = PC_NONE;
         layerInfos[i].sizeInBytes = 0;
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
@@ -82,42 +82,12 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
 
 void* PacketCraft::Packet::GetLayerStart(const uint32_t layerIndex) const
 {
-    switch(layerInfos[layerIndex].type)
-    {
-        case PC_ETHER_II:
-        case PC_ARP_REPLY:
-        case PC_ARP_REQUEST:
-        {
-            return layerInfos[layerIndex].start;
-
-        } break;
-
-        default:
-        {
-            LOG_ERROR(APPLICATION_ERROR, "could not find layer");
-            return nullptr;
-        }
-    }
+    return layerInfos[layerIndex].start;
 }
 
 void* PacketCraft::Packet::GetLayerEnd(const uint32_t layerIndex) const 
 {
-    switch(layerInfos[layerIndex].type)
-    {
-        case PC_ETHER_II:
-        case PC_ARP_REPLY:
-        case PC_ARP_REQUEST:
-        {
-            return layerInfos[layerIndex].end;
-
-        } break;
-
-        default:
-        {
-            LOG_ERROR(APPLICATION_ERROR, "could not find layer");
-            return nullptr;
-        }
-    }
+    return layerInfos[layerIndex].end;
 }
 
 uint32_t PacketCraft::Packet::GetLayerType(const uint32_t layerIndex) const

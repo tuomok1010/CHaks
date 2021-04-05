@@ -9,6 +9,8 @@
 #define NO_ERROR            0
 #define APPLICATION_ERROR   1      
 
+#define ETH_ADDR_STR_LEN    17
+
 #ifdef DEBUG_BUILD
 #define LOG_ERROR(errorCode, msg) PacketCraft::PrintError((errorCode), (__FUNCTION__), (msg))
 #else
@@ -34,6 +36,7 @@ namespace PacketCraft
     int PrintIPAddr(const sockaddr_storage& addr);
     int PrintIPAddr(const sockaddr_in& addr);
     int PrintIPAddr(const sockaddr_in6& addr);
+    int PrintMACAddr(const ether_addr& addr);
 
     // String utils
     int GetStrLen(const char* str);

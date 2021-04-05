@@ -15,7 +15,7 @@
 #include "Utils.h"
 
 
-int main()
+int main(int argc, char** argv)
 {
 
     // SRC INFO
@@ -88,11 +88,12 @@ int main()
 
     packet.Send(mySocket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 
-    // TODO: test with sockaddr_in6 and sockaddr_storage
+    // NOTE: AF_INET6 is buggy!!! find and fix!!
     sockaddr_storage testAddr;
-    testAddr.ss_family = AF_INET;
+    testAddr.ss_family = AF_INET6;
     PacketCraft::GetIPAddr(testAddr, "eth0");
     PacketCraft::PrintIPAddr(testAddr);
+    PacketCraft::PrintMACAddr(srcMAC);
 
     return NO_ERROR;
 }

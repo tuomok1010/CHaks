@@ -8,7 +8,7 @@
 #define IPV4_ALEN 4
 #define IPV6_ALEN 16
 
-#define PC_UNINIT       0x000000
+#define PC_NONE         0x000000
 #define PC_ETHER_II     0x000001
 #define PC_ARP_REPLY    0x000002
 #define PC_ARP_REQUEST  0x000003

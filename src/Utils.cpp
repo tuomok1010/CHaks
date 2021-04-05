@@ -168,6 +168,22 @@ int PacketCraft::PrintIPAddr(const sockaddr_in6& addr)
     }
 }
 
+int PacketCraft::PrintMACAddr(const ether_addr& addr)
+{
+    char addrStr[ETH_ADDR_STR_LEN]{};
+    const char* res = ether_ntoa_r(&addr, addrStr);
+    if(res != nullptr)
+    {
+        std::cout << addrStr << std::flush;
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
 
 
 // General utils
