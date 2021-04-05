@@ -12,6 +12,7 @@
 
 // packet craft
 #include "Packet.h"
+#include "Utils.h"
 
 
 int main()
@@ -39,6 +40,18 @@ int main()
     inet_pton(AF_INET, dstIPStr, &dstIP);
     ////////////////////
 
+    /*
+        TODO: abstract this into another class called ARP.h, which gives the user direct access to the fields 
+        in the arp headers. Perhaps make it inherit from Packet.h so that most of the functions in there are protected.
+
+        OR make a PacketManager class that has functions such as Create() which takes a packet type as argument,
+        and then creates such a packet. Also gives the user direct access to the fields in the packet. 
+
+        OR make some sort of combination of the two.
+
+        Start thinking about other packet types. Try at least with a ping packet. 
+    */
+
     PacketCraft::Packet packet;
 
     packet.AddLayer(PC_ETHER_II, sizeof(ether_header));
@@ -62,7 +75,8 @@ int main()
     int mySocket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
     if(mySocket < 0)
     {
-        std::cerr << "socket() error!" << std::endl;
+        LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+        return APPLICATION_ERROR;
     }
 
     sockaddr_ll sockAddr;
@@ -74,6 +88,12 @@ int main()
 
     packet.Send(mySocket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 
-    return 0;
+    // TODO: test with sockaddr_in6 and sockaddr_storage
+    sockaddr_storage testAddr;
+    testAddr.ss_family = AF_INET;
+    PacketCraft::GetIPAddr(testAddr, "eth0");
+    PacketCraft::PrintIPAddr(testAddr);
+
+    return NO_ERROR;
 }
 

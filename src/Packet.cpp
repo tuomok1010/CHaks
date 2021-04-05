@@ -1,4 +1,5 @@
 #include "Packet.h"
+#include "Utils.h"
 
 // general C++ stuff
 #include <iostream>
@@ -72,10 +73,11 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
     bytesSent = sendto(socket, data, sizeInBytes, flags, dst, dstSize);
     if(bytesSent != sizeInBytes)
     {
-        std::cerr << "sendto() error!" << std::endl;
+        LOG_ERROR(APPLICATION_ERROR, "sendto() error!");
+        return APPLICATION_ERROR;
     }
 
-    return bytesSent;
+    return NO_ERROR;
 }
 
 void* PacketCraft::Packet::GetLayerStart(const uint32_t layerIndex) const
@@ -92,7 +94,7 @@ void* PacketCraft::Packet::GetLayerStart(const uint32_t layerIndex) const
 
         default:
         {
-            std::cerr << "GetLayer(): could not find layer" << std::endl;
+            LOG_ERROR(APPLICATION_ERROR, "could not find layer");
             return nullptr;
         }
     }
@@ -112,7 +114,7 @@ void* PacketCraft::Packet::GetLayerEnd(const uint32_t layerIndex) const
 
         default:
         {
-            std::cerr << "GetLayer(): could not find layer" << std::endl;
+            LOG_ERROR(APPLICATION_ERROR, "could not find layer");
             return nullptr;
         }
     }
