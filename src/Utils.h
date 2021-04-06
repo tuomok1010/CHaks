@@ -33,10 +33,10 @@ namespace PacketCraft
     int GetIPAddr(sockaddr_in6& addr, const char* interfaceName);
     int GetIPAddr(sockaddr_storage& addr, const char* interfaceName);
 
-    int PrintIPAddr(const sockaddr_storage& addr, const char* end = "");
-    int PrintIPAddr(const sockaddr_in& addr, const char* end = "");
-    int PrintIPAddr(const sockaddr_in6& addr, const char* end = "");
-    int PrintMACAddr(const ether_addr& addr, const char* end = "");
+    int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
+    int PrintIPAddr(const sockaddr_in& addr, const char* prefix = "", const char* suffix = "");
+    int PrintIPAddr(const sockaddr_in6& addr, const char* prefix = "", const char* suffix = "");
+    int PrintMACAddr(const ether_addr& addr, const char* prefix = "", const char* suffix = "");
 
     // String utils
     int GetStrLen(const char* str);

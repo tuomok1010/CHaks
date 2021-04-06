@@ -23,6 +23,7 @@ int PacketCraft::GetMACAddr(ether_addr& ethAddr, const char* interfaceName, cons
     result = ioctl(socketFd, SIOCGIFHWADDR, &ifr);
     if(result >= 0)
     {
+        memcpy(ethAddr.ether_addr_octet, ifr.ifr_ifru.ifru_hwaddr.sa_data, ETH_ALEN);
         return NO_ERROR;
     }
     else
@@ -30,7 +31,6 @@ int PacketCraft::GetMACAddr(ether_addr& ethAddr, const char* interfaceName, cons
         LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
-
 }
 
 int PacketCraft::GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd)
@@ -122,27 +122,27 @@ int PacketCraft::GetIPAddr(sockaddr_storage& addr, const char* interfaceName)
     return result;
 }
 
-int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* end)
+int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
 {
     int result{APPLICATION_ERROR};
 
     if(addr.ss_family == AF_INET)
-        result = PrintIPAddr(*(sockaddr_in*)&addr, end);
+        result = PrintIPAddr(*(sockaddr_in*)&addr, prefix, suffix);
     else if(addr.ss_family == AF_INET6)
-        result = PrintIPAddr(*(sockaddr_in6*)&addr, end);
+        result = PrintIPAddr(*(sockaddr_in6*)&addr, prefix, suffix);
     else
         LOG_ERROR(APPLICATION_ERROR, "Unknown address family!");
 
     return result;
 }
 
-int PacketCraft::PrintIPAddr(const sockaddr_in& addr, const char* end)
+int PacketCraft::PrintIPAddr(const sockaddr_in& addr, const char* prefix, const char* suffix)
 {
     char addrStr[INET_ADDRSTRLEN]{};
     const char* res = inet_ntop(AF_INET, &addr.sin_addr.s_addr, addrStr, INET_ADDRSTRLEN);
     if(res != nullptr)
     {
-        std::cout << addrStr << end << std::flush;
+        std::cout << prefix << addrStr << suffix << std::flush;
         return NO_ERROR;
     }
     else
@@ -152,13 +152,13 @@ int PacketCraft::PrintIPAddr(const sockaddr_in& addr, const char* end)
     }
 }
 
-int PacketCraft::PrintIPAddr(const sockaddr_in6& addr, const char* end)
+int PacketCraft::PrintIPAddr(const sockaddr_in6& addr, const char* prefix, const char* suffix)
 {
     char addrStr[INET6_ADDRSTRLEN]{};
     const char* res = inet_ntop(AF_INET6, &addr.sin6_addr.__in6_u, addrStr, INET6_ADDRSTRLEN);
     if(res != nullptr)
     {
-        std::cout << addrStr << end << std::flush;
+        std::cout << prefix << addrStr << suffix << std::flush;
         return NO_ERROR;
     }
     else
@@ -168,13 +168,13 @@ int PacketCraft::PrintIPAddr(const sockaddr_in6& addr, const char* end)
     }
 }
 
-int PacketCraft::PrintMACAddr(const ether_addr& addr, const char* end)
+int PacketCraft::PrintMACAddr(const ether_addr& addr, const char* prefix, const char* suffix)
 {
     char addrStr[ETH_ADDR_STR_LEN]{};
     const char* res = ether_ntoa_r(&addr, addrStr);
     if(res != nullptr)
     {
-        std::cout << addrStr << end << std::flush;
+        std::cout << prefix << addrStr << suffix << std::flush;
         return NO_ERROR;
     }
     else
