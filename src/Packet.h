@@ -1,19 +1,11 @@
-#ifndef PACKET_H
-#define PACKET_H
+#ifndef PC_PACKET_H
+#define PC_PACKET_H
 
 #include <stdint.h>
 #include <sys/types.h>
 #include <netinet/ether.h>
 
-#define IPV4_ALEN 4
-#define IPV6_ALEN 16
-
-#define PC_NONE         0x000000
-#define PC_ETHER_II     0x000001
-#define PC_ARP_REPLY    0x000002
-#define PC_ARP_REQUEST  0x000003
-
-#define PC_MAX_LAYERS   100
+#include "PCTypes.h"
 
 struct __attribute__((__packed__)) ARPHeader
 {
