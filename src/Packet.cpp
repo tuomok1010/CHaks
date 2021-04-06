@@ -23,6 +23,8 @@ PacketCraft::Packet::Packet():
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
     }
+
+    std::cout << "in Packet constructor" << std::endl;
 }
 
 PacketCraft::Packet::~Packet()

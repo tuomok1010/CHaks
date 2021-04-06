@@ -7,16 +7,6 @@
 
 #include "PCTypes.h"
 
-struct __attribute__((__packed__)) ARPHeader
-{
-    arphdr arpHdr;
-
-    unsigned char ar_sha[ETH_ALEN];
-    unsigned char ar_sip[IPV4_ALEN];
-    unsigned char ar_tha[ETH_ALEN];
-    unsigned char ar_tip[IPV4_ALEN];
-};
-
 namespace PacketCraft
 {
     struct LayerInfo

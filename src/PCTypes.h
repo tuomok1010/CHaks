@@ -1,6 +1,8 @@
 #ifndef PC_DEFINES_H
 #define PC_DEFINES_H
 
+#include <sys/types.h>
+
 #define IPV4_ALEN 4
 #define IPV6_ALEN 16
 

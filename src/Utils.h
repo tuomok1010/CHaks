@@ -1,8 +1,6 @@
 #ifndef PC_UTILS_H
 #define PC_UTILS_H
 
-#include <sys/types.h>
-
 #include "PCTypes.h"
 
 #ifdef DEBUG_BUILD
