@@ -92,8 +92,8 @@ int main(int argc, char** argv)
     sockaddr_storage testAddr;
     testAddr.ss_family = AF_INET6;
     PacketCraft::GetIPAddr(testAddr, "eth0");
-    PacketCraft::PrintIPAddr(testAddr);
-    PacketCraft::PrintMACAddr(srcMAC);
+    PacketCraft::PrintIPAddr(testAddr, "\n");
+    PacketCraft::PrintMACAddr(srcMAC, "\n");
 
     return NO_ERROR;
 }
