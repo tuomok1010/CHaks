@@ -24,6 +24,7 @@ namespace PacketCraft
         Packet();
         ~Packet();
 
+        protected:
         void AddLayer(const uint32_t layerType, const size_t layerSize);
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
 
@@ -34,6 +35,7 @@ namespace PacketCraft
         inline void* GetData() const { return data; }
         inline void* Start() const { return start; }
         inline void* End() const { return end; }
+        inline int GetSizeInBytes() const { return sizeInBytes; }
 
         /////////////////
 

@@ -8,7 +8,6 @@
 // network stuff
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <linux/if_packet.h>
 
 // packet craft
 #include "ARP.h"
@@ -24,11 +23,9 @@ int main(int argc, char** argv)
     ether_addr dstMAC;
     ether_aton_r(dstMACStr, &dstMAC);
 
-    in_addr dstIP;
-    inet_pton(AF_INET, dstIPStr, &dstIP);
+    sockaddr_in dstIP;
+    inet_pton(AF_INET, dstIPStr, &dstIP.sin_addr);
     ////////////////////
-
-    // ARP packet test
 
     int mySocket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
     if(mySocket < 0)
@@ -45,6 +42,12 @@ int main(int argc, char** argv)
     PacketCraft::GetIPAddr(srcIP, "eth0");
     PacketCraft::PrintIPAddr(srcIP, "source IP: ", "\n");
 
+    PacketCraft::ARPPacket arpPacket;
+    arpPacket.Create(srcMAC, dstMAC, srcIP, dstIP, ARPType::ARP_REQUEST);
+    arpPacket.Send(mySocket, "eth0");
+
+    // ARP packet test
+    /*
     PacketCraft::Packet packet;
 
     packet.AddLayer(PC_ETHER_II, sizeof(ether_header));
@@ -73,6 +76,7 @@ int main(int argc, char** argv)
     sockAddr.sll_halen = ETH_ALEN;
 
     packet.Send(mySocket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
+    */
 
 
     return NO_ERROR;

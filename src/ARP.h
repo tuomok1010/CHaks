@@ -4,6 +4,9 @@
 #include "PCTypes.h"
 #include "Packet.h"
 
+#include <net/if.h> 
+
+
 struct __attribute__((__packed__)) ARPHeader
 {
     arphdr arpHdr;
@@ -14,6 +17,12 @@ struct __attribute__((__packed__)) ARPHeader
     unsigned char ar_tip[IPV4_ALEN];
 };
 
+enum class ARPType
+{
+    ARP_REQUEST,
+    ARP_REPLY
+};
+
 namespace PacketCraft
 {
     class ARPPacket : public Packet
@@ -22,11 +31,12 @@ namespace PacketCraft
         ARPPacket();
         ~ARPPacket();
 
-        int Create();
+        int Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, ARPType type);
+        int Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, ARPType type);
+        int Send(const int socket, const char* interfaceName) const;
 
         ether_header* ethHeader;
         ARPHeader* arpHeader;
-
     };
 }
 
