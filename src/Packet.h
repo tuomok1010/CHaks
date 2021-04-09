@@ -24,9 +24,11 @@ namespace PacketCraft
         Packet();
         ~Packet();
 
+        // NOTE: consider making these public, so that people could use this class to create packets more flexibly
         protected:
         void AddLayer(const uint32_t layerType, const size_t layerSize);
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
+        void FreePacket();
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;

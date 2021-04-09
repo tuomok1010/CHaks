@@ -23,16 +23,11 @@ PacketCraft::Packet::Packet():
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
     }
-
-    std::cout << "in Packet constructor" << std::endl;
 }
 
 PacketCraft::Packet::~Packet()
 {
-    if(data)
-    {
-        free(data);
-    }
+    FreePacket();
 }
 
 void PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
@@ -80,6 +75,23 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
     }
 
     return NO_ERROR;
+}
+
+void PacketCraft::Packet::FreePacket()
+{
+    if(data)
+    {
+        free(data);
+        data = nullptr;
+
+        for(int i = 0; i < PC_MAX_LAYERS; ++i)
+        {
+            layerInfos[i].type = PC_NONE;
+            layerInfos[i].sizeInBytes = 0;
+            layerInfos[i].start = nullptr;
+            layerInfos[i].end = nullptr;
+        }
+    }
 }
 
 void* PacketCraft::Packet::GetLayerStart(const uint32_t layerIndex) const

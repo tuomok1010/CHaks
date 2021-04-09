@@ -6,18 +6,22 @@
 #include <linux/if_packet.h>
 #include <netinet/in.h>
 
-PacketCraft::ARPPacket::ARPPacket()
+PacketCraft::ARPPacket::ARPPacket():
+    ethHeader(nullptr),
+    arpHeader(nullptr)
 {
 
 }
 
 PacketCraft::ARPPacket::~ARPPacket()
 {
-
+    FreePacket();
 }
 
 int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, ARPType type)
 {
+    FreePacket();
+
     ether_addr srcMAC;
     ether_addr dstMAC;
     sockaddr_in srcIP;
@@ -70,6 +74,8 @@ int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr,
 
 int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, ARPType type)
 {
+    FreePacket();
+
     AddLayer(PC_ETHER_II, sizeof(ether_header));
     ethHeader = (ether_header*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
