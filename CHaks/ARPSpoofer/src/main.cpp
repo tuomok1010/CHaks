@@ -8,5 +8,7 @@ int main()
     PacketCraft::GetIPAddr(testAddr, "eth0");
     PacketCraft::PrintIPAddr(testAddr, "my IP: ", "\n");
 
+
+
     return 0;
 }
