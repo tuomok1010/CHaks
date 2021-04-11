@@ -1,6 +1,6 @@
 #!/bin/bash
 
-Code="../../src/main.cpp"
+Code="../../src/main.cpp ../../src/ARPSpoofer.cpp"
 LibPath="/home/tuomok/Projects/CHaks/CHaks/PacketCraft/build/lib/"
 IncludePath="/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/"
 export LD_LIBRARY_PATH=$LibPath:$LD_LIBRARY_PATH
