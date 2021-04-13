@@ -1,20 +1,29 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 #include <netinet/in.h>
+#include <unistd.h>
 #include <iostream>
 
 #include "ARPSpoofer.h"
 
+void PrintHelp(char** argv)
+{
+    std::cout
+        << "To use the program, provide the arguments in the following format:\n"
+        << argv[0] << " <interface name> <source IP> <destination IP>"
+        << std::endl;
+}
+
 // TODO: verify the given args format, and PrintHelp() if they are invalid.
-int ProcessArgs(int argc, char** argv, char* ifName, const char* srcIP, const char* dstIP)
+int ProcessArgs(int argc, char** argv, char* ifName, char* srcIP, char* dstIP)
 {
     if(argc != 4)
     {
-        LOG_ERROR(APPLICATION, "invalid args error!");
+        LOG_ERROR(APPLICATION_ERROR, "invalid args error!");
         return APPLICATION_ERROR;
     }
-    else if(argc == 2 && argv[1] == "?")
+    else if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
-        PrintHelp();
+        PrintHelp(argv);
     }
 
     PacketCraft::CopyStr(ifName, PacketCraft::GetStrLen(argv[1]), argv[1]);
@@ -22,14 +31,6 @@ int ProcessArgs(int argc, char** argv, char* ifName, const char* srcIP, const ch
     PacketCraft::CopyStr(dstIP, PacketCraft::GetStrLen(argv[3]), argv[3]);
 
     return NO_ERROR;
-}
-
-void PrintHelp()
-{
-    std::cout
-        << "To use the program, provide the arguments in the following format:\n"
-        << argv[0] << " <interface name> <source IP> <destination IP>"
-        << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -44,7 +45,7 @@ int main(int argc, char** argv)
     if(ProcessArgs(argc, argv, interfaceName, srcIPStr, dstIPStr) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
-        PrintHelp();
+        PrintHelp(argv);
         return APPLICATION_ERROR;
     }
 
@@ -54,7 +55,24 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    
+    PacketCraft::PrintIPAddr(originalSrcIP, "your IP: ", "\n");
+
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
+    if(socketFd < 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+        return APPLICATION_ERROR;
+    }
+
+    std::cout << "socket created\n";
+
+    ARPSpoof::ARPSpoofer arpSpoofer;
+    ether_addr testMAC;
+    arpSpoofer.GetARPTableAddr(socketFd, "eth0", originalSrcIP, testMAC);
+    PacketCraft::PrintMACAddr(testMAC, "GetARPTableAddr() test result: ", "\n");
+
+
+    close(socketFd);
 
     return 0;
 }
