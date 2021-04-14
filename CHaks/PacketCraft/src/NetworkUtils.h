@@ -10,6 +10,8 @@ namespace PacketCraft
     int GetIPAddr(sockaddr_in& addr, const char* interfaceName);
     int GetIPAddr(sockaddr_in6& addr, const char* interfaceName);
     int GetIPAddr(sockaddr_storage& addr, const char* interfaceName);
+    int GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr);
+    int GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr);
 
     int EnablePortForwarding();
     int DisablePortForwarding();

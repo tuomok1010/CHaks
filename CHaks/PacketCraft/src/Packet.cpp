@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include <netinet/ether.h>
+#include <netinet/ip.h>
 
 PacketCraft::Packet::Packet():
     data(nullptr),
@@ -75,6 +76,15 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
     }
 
     return NO_ERROR;
+}
+
+// TODO: recvfrom is blocking, so consider using poll() and give user an option to provide a wait timeout for waiting the packet. 
+int PacketCraft::Packet::Receive(const int socket, const int flags)
+{
+    uint8_t packet[IP_MAXPACKET]{};
+    sockaddr fromInfo{};
+    socklen_t fromInfoLen{sizeof(fromInfo)};
+
 }
 
 void PacketCraft::Packet::FreePacket()

@@ -1,10 +1,9 @@
 #ifndef ARPSPOOFER_H
 #define ARPSPOOFER_H
 
-#define ARP_SPOOF_FREQUENCY_MS 2'000
+#include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 
-struct sockaddr_in;
-struct ether_addr;
+#define ARP_SPOOF_FREQUENCY_MS 2'000
 
 namespace ARPSpoof
 {
@@ -14,10 +13,8 @@ namespace ARPSpoof
         ARPSpoofer();
         ~ARPSpoofer();
 
-        int Spoof(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* targetIP);
-        int SpoofLoop(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* targetIP);
-        int GetARPTableAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr);
-        int GetARPTableAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr);
+        int Spoof(const int socketFd, const char* interfaceName, const PacketCraft::ARPPacket& arpPacket);
+        int SpoofLoop(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* dstIP);
 
         private:
         float timeElapsed;

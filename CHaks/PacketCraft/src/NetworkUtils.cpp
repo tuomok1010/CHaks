@@ -119,6 +119,38 @@ int PacketCraft::GetIPAddr(sockaddr_storage& addr, const char* interfaceName)
     return result;
 }
 
+int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr)
+{
+    arpreq arpEntry{};
+    arpEntry.arp_pa.sa_family = AF_INET;
+    memcpy(arpEntry.arp_pa.sa_data, ((sockaddr*)&ipAddr)->sa_data, sizeof(arpEntry.arp_pa.sa_data));
+    arpEntry.arp_ha.sa_family = ARPHRD_ETHER;
+    PacketCraft::CopyStr(arpEntry.arp_dev, sizeof(arpEntry.arp_dev), interfaceName);
+    arpEntry.arp_flags = ATF_COM;   // TODO: is this needed? remove if not
+
+    int res = ioctl(socketFd, SIOCGARP, &arpEntry);
+    if(res < 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
+    
+    memcpy(macAddr.ether_addr_octet, arpEntry.arp_ha.sa_data, ETH_ALEN);
+    return NO_ERROR;
+}
+
+int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr)
+{
+    sockaddr_in ipAddr{};
+    if(inet_pton(AF_INET, ipAddrStr, &ipAddr.sin_addr) <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetARPTableMACAddr(socketFd, interfaceName, ipAddr, macAddr);
+}
+
 int PacketCraft::EnablePortForwarding()
 {
     int status{};
