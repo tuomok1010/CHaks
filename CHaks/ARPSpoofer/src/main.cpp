@@ -3,6 +3,10 @@
 #include <unistd.h>
 #include <iostream>
 
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+
 #include "ARPSpoofer.h"
 
 void PrintHelp(char** argv)
@@ -55,8 +59,6 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    PacketCraft::PrintIPAddr(originalSrcIP, "your IP: ", "\n");
-
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
     if(socketFd < 0)
     {
@@ -64,15 +66,12 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    std::cout << "socket created\n";
-
     ARPSpoof::ARPSpoofer arpSpoofer;
     ether_addr testMAC;
-    arpSpoofer.GetARPTableAddr(socketFd, "eth0", originalSrcIP, testMAC);
+    arpSpoofer.GetARPTableAddr(socketFd, "eth0", "10.0.2.1", testMAC);
     PacketCraft::PrintMACAddr(testMAC, "GetARPTableAddr() test result: ", "\n");
 
 
     close(socketFd);
-
     return 0;
 }

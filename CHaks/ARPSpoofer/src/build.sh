@@ -7,5 +7,5 @@ export LD_LIBRARY_PATH=$LibPath:$LD_LIBRARY_PATH
 
 
 cd ../build/rel
-g++ -L$LibPath -Wl,-rpath,$LibPath -Wall -o ARPSpoofer $Code -I$IncludePath -lpacketcraft
+g++ -L$LibPath -Wl,-rpath,$LibPath -Wall -D DEBUG_BUILD -o ARPSpoofer $Code -I$IncludePath -lpacketcraft
 cd ../../src

@@ -17,6 +17,7 @@ namespace ARPSpoof
         int Spoof(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* targetIP);
         int SpoofLoop(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* targetIP);
         int GetARPTableAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr);
+        int GetARPTableAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr);
 
         private:
         float timeElapsed;
