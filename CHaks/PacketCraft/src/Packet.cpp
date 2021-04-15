@@ -1,11 +1,13 @@
 #include "Packet.h"
 #include "Utils.h"
+#include "ARP.h"
 
 // general C++ stuff
 #include <iostream>
 
 #include <cstdlib>
 #include <cstring>
+#include <poll.h>
 
 #include <netinet/ether.h>
 #include <netinet/ip.h>
@@ -78,12 +80,89 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
     return NO_ERROR;
 }
 
-// TODO: recvfrom is blocking, so consider using poll() and give user an option to provide a wait timeout for waiting the packet. 
-int PacketCraft::Packet::Receive(const int socket, const int flags)
+
+int PacketCraft::Packet::Receive(const int socket, const int flags, int waitTimeoutMS)
 {
     uint8_t packet[IP_MAXPACKET]{};
     sockaddr fromInfo{};
     socklen_t fromInfoLen{sizeof(fromInfo)};
+
+    pollfd pollFds[1]{};
+    pollFds[0].fd = socket;
+    pollFds[0].events = POLLIN;
+
+    int bytesReceived{};
+
+    while(true)
+    {
+        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
+        if(nEvents == -1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "poll() error!");
+            return APPLICATION_ERROR;
+        }
+        else if(nEvents == 0)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
+            return APPLICATION_ERROR;
+        }
+        else if(pollFds[0].revents & POLLIN)
+        {
+            bytesReceived = recvfrom(socket, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
+            if(bytesReceived == -1)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
+                return APPLICATION_ERROR;
+            }
+            else if(bytesReceived == 0)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
+                return APPLICATION_ERROR;
+            }
+            else
+            {
+                FreePacket();
+                if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
+                    return APPLICATION_ERROR;
+                }
+                else
+                {
+                    return NO_ERROR;
+                }
+            }
+        }
+    }
+}
+
+// TODO: extensive testing! This needs to be bulletproof!!!
+int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short protocol)
+{
+    switch(protocol)
+    {
+        case 0:
+        {
+            AddLayer(PC_ETHER_II, ETH_HLEN);
+            memcpy(data, packet, ETH_HLEN);
+            protocol = ((ethhdr*)packet)->h_proto;
+            (ethhdr*)packet++;
+        }
+        case ETH_P_ARP:
+        {
+            AddLayer(PC_ARP, sizeof(ARPHeader));
+            memcpy(GetLayerStart(nLayers - 1), packet, sizeof(ARPHeader));
+            return NO_ERROR;
+        }
+        default:
+        {
+            FreePacket();
+            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return ProcessReceivedPacket(packet, protocol);
 
 }
 

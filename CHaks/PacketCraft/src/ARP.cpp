@@ -51,13 +51,14 @@ int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr,
         return APPLICATION_ERROR;
     }
 
+    // NOTE: there is also a struct called ethhdr. Which one should we use?
     AddLayer(PC_ETHER_II, sizeof(ether_header));
     ethHeader = (ether_header*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_ARP);
 
-    AddLayer(type == ARPType::ARP_REQUEST ? PC_ARP_REQUEST : PC_ARP_REPLY, sizeof(ARPHeader));
+    AddLayer(PC_ARP, sizeof(ARPHeader));
     arpHeader = (ARPHeader*)GetLayerStart(1);
     arpHeader->arpHdr.ar_hrd = htons(ARPHRD_ETHER);
     arpHeader->arpHdr.ar_pro = htons(ETH_P_IP);
@@ -82,7 +83,7 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_ARP);
 
-    AddLayer(type == ARPType::ARP_REQUEST ? PC_ARP_REQUEST : PC_ARP_REPLY, sizeof(ARPHeader));
+    AddLayer(PC_ARP, sizeof(ARPHeader));
     arpHeader = (ARPHeader*)GetLayerStart(1);
     arpHeader->arpHdr.ar_hrd = htons(ARPHRD_ETHER);
     arpHeader->arpHdr.ar_pro = htons(ETH_P_IP);
@@ -114,4 +115,45 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
     sockAddr.sll_halen = ETH_ALEN;
 
     return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
+}
+
+void PacketCraft::ARPPacket::PrintPacketData() const
+{
+    char ethDstMAC[ETH_ADDR_STR_LEN]{};
+    char ethSrcMAC[ETH_ADDR_STR_LEN]{};
+    uint16_t packetType{};
+
+
+}
+
+// TODO: extensive testing! This needs to be bulletproof!!!
+int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned short protocol)
+{
+    switch(protocol)
+    {
+        case 0:
+        {
+            AddLayer(PC_ETHER_II, ETH_HLEN);
+            memcpy(GetData(), packet, ETH_HLEN);
+            protocol = ((ether_header*)packet)->ether_type;
+            ethHeader = (ether_header*)GetLayerStart(GetNLayers() - 1);
+            (ether_header*)packet++;
+        }
+        case ETH_P_ARP:
+        {
+            AddLayer(PC_ARP, sizeof(ARPHeader));
+            memcpy(GetLayerStart(GetNLayers() - 1), packet, sizeof(ARPHeader));
+            arpHeader = (ARPHeader*)GetLayerStart(GetNLayers() - 1);
+            return NO_ERROR;
+        }
+        default:
+        {
+            FreePacket();
+            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return ProcessReceivedPacket(packet, protocol);
+
 }

@@ -1,13 +1,16 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
+
 #include <netinet/in.h>
-#include <unistd.h>
+#include <arpa/inet.h> 
 #include <iostream>
 
+#include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
 
 #include "ARPSpoofer.h"
+
 
 void PrintHelp(char** argv)
 {
@@ -53,6 +56,8 @@ int main(int argc, char** argv)
 {
     sockaddr_in myIP{};
     ether_addr myMAC{};
+    char myIPStr[INET_ADDRSTRLEN]{};
+    char myMACStr[ETH_ADDR_STR_LEN]{};
 
     char interfaceName[IFNAMSIZ]{};
     char srcIPStr[INET_ADDRSTRLEN]{};
@@ -75,22 +80,42 @@ int main(int argc, char** argv)
 
     if(PacketCraft::GetIPAddr(myIP, interfaceName) == APPLICATION_ERROR)
     {
+        close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetIPAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET, &myIP.sin_addr, myIPStr, INET_ADDRSTRLEN) == nullptr)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 
     if(PacketCraft::GetMACAddr(myMAC, interfaceName, socketFd) == APPLICATION_ERROR)
     {
+        close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetMACAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r(&myMAC, myMACStr) == nullptr)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
     ether_addr dstMAC{};
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
     {
-        // need to send arp request and update arp table with the info from the arp reply. Started working on receiving packets
-        // in PacketCraft::Packet class
-        break;
+        PacketCraft::ARPPacket arpPacket;
+        arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST);
+
+        if(arpPacket.Receive(socketFd, 0, 5) == NO_ERROR)
+        {
+            
+        }
     }
     
 

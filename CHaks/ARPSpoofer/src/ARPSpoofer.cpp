@@ -49,7 +49,12 @@ int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceNam
     while(true)
     {
         int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), ARP_SPOOF_FREQUENCY_MS);
-        if(nEvents == 0)
+        if(nEvents == -1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "poll() error!");
+            return APPLICATION_ERROR;
+        }
+        else if(nEvents == 0)
         {
             if(Spoof(socketFd, interfaceName, arpPacket) == APPLICATION_ERROR)
             {
