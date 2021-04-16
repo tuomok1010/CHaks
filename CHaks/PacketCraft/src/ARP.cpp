@@ -1,6 +1,8 @@
 #include "ARP.h"
 #include "Utils.h"
 
+#include <iostream>
+
 #include <cstring>
 #include <arpa/inet.h>
 #include <linux/if_packet.h>
@@ -39,13 +41,13 @@ int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr,
         return APPLICATION_ERROR;
     }
 
-    if(inet_pton(AF_INET, srcIPStr, &srcIP) <= 0)
+    if(inet_pton(AF_INET, srcIPStr, &srcIP.sin_addr) <= 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
     }
 
-    if(inet_pton(AF_INET, dstIPStr, &dstIP) <= 0)
+    if(inet_pton(AF_INET, dstIPStr, &dstIP.sin_addr) <= 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
@@ -119,11 +121,59 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
 
 void PacketCraft::ARPPacket::PrintPacketData() const
 {
-    char ethDstMAC[ETH_ADDR_STR_LEN]{};
-    char ethSrcMAC[ETH_ADDR_STR_LEN]{};
-    uint16_t packetType{};
+    char ethDstAddr[ETH_ADDR_STR_LEN]{};                                /* destination eth addr	*/
+    char ethSrcAddr[ETH_ADDR_STR_LEN]{};                                /* source ether addr	*/
+    uint16_t ether_type = ntohs(ethHeader->ether_type);		            /* packet type ID field	*/
 
+    ether_addr ethHdrDstAddr{};
+    memcpy(ethHdrDstAddr.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
+    ether_ntoa_r(&ethHdrDstAddr, ethDstAddr);
 
+    ether_addr ethHdrSrcAddr{};
+    memcpy(ethHdrSrcAddr.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
+    ether_ntoa_r(&ethHdrSrcAddr, ethSrcAddr);
+
+    unsigned short int ar_hrd = ntohs(arpHeader->arpHdr.ar_hrd);		/* Format of hardware address.  */
+    unsigned short int ar_pro = ntohs(arpHeader->arpHdr.ar_pro);		/* Format of protocol address.  */
+    unsigned char ar_hln = arpHeader->arpHdr.ar_hln;		            /* Length of hardware address.  */
+    unsigned char ar_pln = arpHeader->arpHdr.ar_pln;		            /* Length of protocol address.  */
+    unsigned short int ar_op = ntohs(arpHeader->arpHdr.ar_op);		    /* ARP opcode (command).  */
+
+    char ar_sha[ETH_ADDR_STR_LEN]{};                                    /* Sender hardware address.  */
+    char ar_sip[INET_ADDRSTRLEN]{};                                     /* Sender IP address.  */
+    char ar_tha[ETH_ADDR_STR_LEN]{};                                    /* Target hardware address.  */
+    char ar_tip[INET_ADDRSTRLEN]{};                                     /* Target IP address.  */
+
+    inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN);
+
+    ether_addr senderMACAddr{};
+    memcpy(senderMACAddr.ether_addr_octet, arpHeader->ar_sha, ETH_ALEN);
+    ether_ntoa_r(&senderMACAddr, ar_sha);
+
+    ether_addr targetMACAddr{};
+    memcpy(targetMACAddr.ether_addr_octet, arpHeader->ar_tha, ETH_ALEN);
+    ether_ntoa_r(&targetMACAddr, ar_tha);
+
+    // TODO: format nicely with iomanip perhaps?
+    std::cout
+        << " = = = = = = = = = = = = = = = = = = = = \n"
+        << "[ETHERNET]:\n"
+        << "destination: "          << ethDstAddr   << "\n"
+        << "source: "               << ethSrcAddr   << "\n"
+        << "type: "                 << ether_type   << "\n"
+        << " - - - - - - - - - - - - - - - - - - - - \n"
+        << "[ARP]:\n"
+        << "hardware type: "        << ar_hrd       << "\n"
+        << "protocol type: "        << ar_pro       << "\n"
+        << "hardware size: "        << ar_hln       << "\n"
+        << "protocol size: "        << ar_pln       << "\n"
+        << "op code: "              << ar_op        << "(" << (ar_op == 1 ? "request" : "reply") << ")\n"
+        << "sender MAC address: "   << ar_sha       << "\n"
+        << "sender IP address: "    << ar_sip       << "\n"
+        << "target MAC address: "   << ar_tha       << "\n"
+        << "target IP address: "    << ar_tip       << "\n"
+        << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!

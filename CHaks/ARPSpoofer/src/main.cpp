@@ -111,10 +111,33 @@ int main(int argc, char** argv)
     {
         PacketCraft::ARPPacket arpPacket;
         arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST);
+        arpPacket.Send(socketFd, interfaceName);
 
-        if(arpPacket.Receive(socketFd, 0, 5) == NO_ERROR)
+        if(arpPacket.Receive(socketFd, 0, 5000) == NO_ERROR)
         {
-            
+            std::cout << "Received ARP packet:\n\n";
+            arpPacket.PrintPacketData();
+
+            char ip[INET_ADDRSTRLEN]{};
+            char mac[ETH_ADDR_STR_LEN]{};
+
+            if(inet_ntop(AF_INET, arpPacket.arpHeader->ar_sip, ip, INET_ADDRSTRLEN) == nullptr)
+            {
+                close(socketFd);
+                LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+                return APPLICATION_ERROR;
+            }
+
+            ether_addr macAddr{};
+            memcpy(macAddr.ether_addr_octet, arpPacket.arpHeader->ar_sha, ETH_ALEN);
+            if(ether_ntoa_r(&macAddr, mac) == nullptr)
+            {
+                close(socketFd);
+                LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+                return APPLICATION_ERROR;
+            }
+
+            PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ip, mac);
         }
     }
     

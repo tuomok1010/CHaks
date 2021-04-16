@@ -39,12 +39,14 @@ void PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerS
     void* newData = malloc(newDataSize);
     memcpy(newData, data, sizeInBytes);
 
+/*
     std::cout 
         << "Adding layer of type "  << layerType 
         << " with size "            << layerSize
         << ". Old size is "         << sizeInBytes
         << ". New size is "         << newDataSize 
         << std::endl;
+*/
 
     if(data)
     {           
