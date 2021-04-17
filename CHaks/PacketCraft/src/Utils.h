@@ -4,7 +4,7 @@
 #include "PCTypes.h"
 
 #ifdef DEBUG_BUILD
-#define LOG_ERROR(errorCode, msg) PacketCraft::PrintError((errorCode), (__FUNCTION__), (msg))
+#define LOG_ERROR(errorCode, msg) PacketCraft::PrintError((errorCode), (__PRETTY_FUNCTION__), (msg))
 #else
     #define LOG_ERROR(errorCode, msg)
 #endif

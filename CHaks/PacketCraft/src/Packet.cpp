@@ -33,10 +33,17 @@ PacketCraft::Packet::~Packet()
     FreePacket();
 }
 
-void PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
+int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
 {
     size_t newDataSize = layerSize + sizeInBytes;
     void* newData = malloc(newDataSize);
+
+    if(newData == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
+        return APPLICATION_ERROR;
+    }
+
     memcpy(newData, data, sizeInBytes);
 
 /*
@@ -54,6 +61,12 @@ void PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerS
     }
     
     data = malloc(newDataSize);
+    if(data == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
+        return APPLICATION_ERROR;
+    }
+
     memcpy(data, newData, newDataSize);
     free(newData);
 
@@ -67,6 +80,8 @@ void PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerS
 
     sizeInBytes += layerSize;
     ++nLayers;
+
+    return NO_ERROR;
 }
 
 int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const
@@ -83,14 +98,14 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
 }
 
 
-int PacketCraft::Packet::Receive(const int socket, const int flags, int waitTimeoutMS)
+int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTimeoutMS)
 {
     uint8_t packet[IP_MAXPACKET]{};
     sockaddr fromInfo{};
     socklen_t fromInfoLen{sizeof(fromInfo)};
 
     pollfd pollFds[1]{};
-    pollFds[0].fd = socket;
+    pollFds[0].fd = socketFd;
     pollFds[0].events = POLLIN;
 
     int bytesReceived{};
@@ -110,7 +125,7 @@ int PacketCraft::Packet::Receive(const int socket, const int flags, int waitTime
         }
         else if(pollFds[0].revents & POLLIN)
         {
-            bytesReceived = recvfrom(socket, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
+            bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
             if(bytesReceived == -1)
             {
                 LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
@@ -174,6 +189,8 @@ void PacketCraft::Packet::FreePacket()
     {
         free(data);
         data = nullptr;
+        sizeInBytes = 0;
+        nLayers = 0;
 
         for(int i = 0; i < PC_MAX_LAYERS; ++i)
         {

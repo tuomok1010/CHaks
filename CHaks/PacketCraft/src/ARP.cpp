@@ -119,7 +119,7 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
     return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 }
 
-void PacketCraft::ARPPacket::PrintPacketData() const
+int PacketCraft::ARPPacket::PrintPacketData() const
 {
     char ethDstAddr[ETH_ADDR_STR_LEN]{};                                /* destination eth addr	*/
     char ethSrcAddr[ETH_ADDR_STR_LEN]{};                                /* source ether addr	*/
@@ -127,11 +127,19 @@ void PacketCraft::ARPPacket::PrintPacketData() const
 
     ether_addr ethHdrDstAddr{};
     memcpy(ethHdrDstAddr.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
-    ether_ntoa_r(&ethHdrDstAddr, ethDstAddr);
+    if(ether_ntoa_r(&ethHdrDstAddr, ethDstAddr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
 
     ether_addr ethHdrSrcAddr{};
     memcpy(ethHdrSrcAddr.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
-    ether_ntoa_r(&ethHdrSrcAddr, ethSrcAddr);
+    if(ether_ntoa_r(&ethHdrSrcAddr, ethSrcAddr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
 
     unsigned short int ar_hrd = ntohs(arpHeader->arpHdr.ar_hrd);		/* Format of hardware address.  */
     unsigned short int ar_pro = ntohs(arpHeader->arpHdr.ar_pro);		/* Format of protocol address.  */
@@ -144,16 +152,33 @@ void PacketCraft::ARPPacket::PrintPacketData() const
     char ar_tha[ETH_ADDR_STR_LEN]{};                                    /* Target hardware address.  */
     char ar_tip[INET_ADDRSTRLEN]{};                                     /* Target IP address.  */
 
-    inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN);
+    if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
 
     ether_addr senderMACAddr{};
     memcpy(senderMACAddr.ether_addr_octet, arpHeader->ar_sha, ETH_ALEN);
-    ether_ntoa_r(&senderMACAddr, ar_sha);
+    if(ether_ntoa_r(&senderMACAddr, ar_sha) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
 
     ether_addr targetMACAddr{};
     memcpy(targetMACAddr.ether_addr_octet, arpHeader->ar_tha, ETH_ALEN);
-    ether_ntoa_r(&targetMACAddr, ar_tha);
+    if(ether_ntoa_r(&targetMACAddr, ar_tha) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
 
     // TODO: format nicely with iomanip perhaps?
     std::cout
@@ -174,6 +199,8 @@ void PacketCraft::ARPPacket::PrintPacketData() const
         << "target MAC address: "   << ar_tha       << "\n"
         << "target IP address: "    << ar_tip       << "\n"
         << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
+
+    return NO_ERROR;
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
@@ -185,9 +212,10 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(GetData(), packet, ETH_HLEN);
-            protocol = ((ether_header*)packet)->ether_type;
+            protocol = ntohs(((ether_header*)packet)->ether_type);
             ethHeader = (ether_header*)GetLayerStart(GetNLayers() - 1);
-            (ether_header*)packet++;
+            packet += ETH_HLEN;
+            break;
         }
         case ETH_P_ARP:
         {

@@ -109,6 +109,8 @@ int main(int argc, char** argv)
     ether_addr dstMAC{};
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
     {
+        std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
+
         PacketCraft::ARPPacket arpPacket;
         arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST);
         arpPacket.Send(socketFd, interfaceName);

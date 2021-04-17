@@ -25,9 +25,9 @@ namespace PacketCraft
         ~Packet();
 
         // Check PCTypes.h for valid layerTypes
-        void AddLayer(const uint32_t layerType, const size_t layerSize);
+        int AddLayer(const uint32_t layerType, const size_t layerSize);
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
-        int Receive(const int socket, const int flags, int waitTimeoutMS = -1);
+        int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         virtual int ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader);
         void FreePacket();
 
