@@ -159,6 +159,7 @@ int PacketCraft::AddAddrToARPTable(const int socketFd, const char* interfaceName
     memcpy(arpEntry.arp_ha.sa_data, macAddr.ether_addr_octet, ETH_ALEN);
     arpEntry.arp_ha.sa_family = ARPHRD_ETHER;
     PacketCraft::CopyStr(arpEntry.arp_dev, sizeof(arpEntry.arp_dev), interfaceName);
+    arpEntry.arp_flags = ATF_COM;
 
     int res = ioctl(socketFd, SIOCSARP, &arpEntry);
     if(res < 0)

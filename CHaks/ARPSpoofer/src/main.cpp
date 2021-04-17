@@ -110,6 +110,7 @@ int main(int argc, char** argv)
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
     {
         std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
+        sleep(2);
 
         PacketCraft::ARPPacket arpPacket;
         arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST);
@@ -139,11 +140,14 @@ int main(int argc, char** argv)
                 return APPLICATION_ERROR;
             }
 
-            PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ip, mac);
+            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ip, mac) == APPLICATION_ERROR)
+            {
+                close(socketFd);
+                LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
+                return APPLICATION_ERROR;
+            }
         }
     }
-    
-
 
 
 
@@ -164,6 +168,8 @@ int main(int argc, char** argv)
     if(portForward == TRUE)
         PacketCraft::DisablePortForwarding();
 
+
+    std::cout << "closing socket and exiting program...\n";
     close(socketFd);
     return 0;
 }
