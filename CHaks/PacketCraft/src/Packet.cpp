@@ -110,47 +110,47 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
 
     int bytesReceived{};
 
-    while(true)
+    int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
+    if(nEvents == -1)
     {
-        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
-        if(nEvents == -1)
+        LOG_ERROR(APPLICATION_ERROR, "poll() error!");
+        return APPLICATION_ERROR;
+    }
+    else if(nEvents == 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
+        return APPLICATION_ERROR;
+    }
+    else if(pollFds[0].revents & POLLIN)
+    {
+        bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
+        if(bytesReceived == -1)
         {
-            LOG_ERROR(APPLICATION_ERROR, "poll() error!");
+            LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
             return APPLICATION_ERROR;
         }
-        else if(nEvents == 0)
+        else if(bytesReceived == 0)
         {
-            LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
+            LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
             return APPLICATION_ERROR;
         }
-        else if(pollFds[0].revents & POLLIN)
+        else
         {
-            bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
-            if(bytesReceived == -1)
+            FreePacket();
+            if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
             {
-                LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
-                return APPLICATION_ERROR;
-            }
-            else if(bytesReceived == 0)
-            {
-                LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
+                LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
                 return APPLICATION_ERROR;
             }
             else
             {
-                FreePacket();
-                if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
-                    return APPLICATION_ERROR;
-                }
-                else
-                {
-                    return NO_ERROR;
-                }
+                return NO_ERROR;
             }
         }
     }
+
+    LOG_ERROR(APPLICATION_ERROR, "unknown error!");
+    return APPLICATION_ERROR;
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!

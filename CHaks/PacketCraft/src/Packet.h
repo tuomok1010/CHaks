@@ -29,7 +29,7 @@ namespace PacketCraft
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         virtual int ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader);
-        void FreePacket();
+        virtual void FreePacket();
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;

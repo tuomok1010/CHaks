@@ -20,10 +20,33 @@ PacketCraft::ARPPacket::~ARPPacket()
     FreePacket();
 }
 
-int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, ARPType type)
+int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, ARPType type)
 {
     FreePacket();
 
+    AddLayer(PC_ETHER_II, sizeof(ether_header));
+    ethHeader = (ether_header*)GetLayerStart(0);
+    memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
+    ethHeader->ether_type = htons(ETH_P_ARP);
+
+    AddLayer(PC_ARP, sizeof(ARPHeader));
+    arpHeader = (ARPHeader*)GetLayerStart(1);
+    arpHeader->ar_hrd = htons(ARPHRD_ETHER);
+    arpHeader->ar_pro = htons(ETH_P_IP);
+    arpHeader->ar_hln = ETH_ALEN;
+    arpHeader->ar_pln = IPV4_ALEN;
+    arpHeader->ar_op = htons(type == ARPType::ARP_REQUEST ? ARPOP_REQUEST : ARPOP_REPLY);
+    memcpy(arpHeader->ar_sha, srcMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
+    memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
+
+    return NO_ERROR;
+}
+
+int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, ARPType type)
+{
     ether_addr srcMAC;
     ether_addr dstMAC;
     sockaddr_in srcIP;
@@ -53,51 +76,7 @@ int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr,
         return APPLICATION_ERROR;
     }
 
-    // NOTE: there is also a struct called ethhdr. Which one should we use?
-    AddLayer(PC_ETHER_II, sizeof(ether_header));
-    ethHeader = (ether_header*)GetLayerStart(0);
-    memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
-    ethHeader->ether_type = htons(ETH_P_ARP);
-
-    AddLayer(PC_ARP, sizeof(ARPHeader));
-    arpHeader = (ARPHeader*)GetLayerStart(1);
-    arpHeader->arpHdr.ar_hrd = htons(ARPHRD_ETHER);
-    arpHeader->arpHdr.ar_pro = htons(ETH_P_IP);
-    arpHeader->arpHdr.ar_hln = ETH_ALEN;
-    arpHeader->arpHdr.ar_pln = IPV4_ALEN;
-    arpHeader->arpHdr.ar_op = htons(type == ARPType::ARP_REQUEST ? ARPOP_REQUEST : ARPOP_REPLY);
-    memcpy(arpHeader->ar_sha, srcMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
-    memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
-
-    return NO_ERROR;
-}
-
-int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, ARPType type)
-{
-    FreePacket();
-
-    AddLayer(PC_ETHER_II, sizeof(ether_header));
-    ethHeader = (ether_header*)GetLayerStart(0);
-    memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
-    ethHeader->ether_type = htons(ETH_P_ARP);
-
-    AddLayer(PC_ARP, sizeof(ARPHeader));
-    arpHeader = (ARPHeader*)GetLayerStart(1);
-    arpHeader->arpHdr.ar_hrd = htons(ARPHRD_ETHER);
-    arpHeader->arpHdr.ar_pro = htons(ETH_P_IP);
-    arpHeader->arpHdr.ar_hln = ETH_ALEN;
-    arpHeader->arpHdr.ar_pln = IPV4_ALEN;
-    arpHeader->arpHdr.ar_op = htons(type == ARPType::ARP_REQUEST ? ARPOP_REQUEST : ARPOP_REPLY);
-    memcpy(arpHeader->ar_sha, srcMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
-    memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
-    memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
-
-    return NO_ERROR;
+    return Create(srcMAC, dstMAC, srcIP, dstIP, type);
 }
 
 int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) const
@@ -119,11 +98,30 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
     return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 }
 
+void PacketCraft::ARPPacket::FreePacket()
+{
+    PacketCraft::Packet::FreePacket();
+    ethHeader = nullptr;
+    arpHeader = nullptr;
+}
+
 int PacketCraft::ARPPacket::PrintPacketData() const
 {
+    if(ethHeader == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ethHeader is null!");
+        return APPLICATION_ERROR;
+    }
+    if(arpHeader == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "arpHeader is null!");
+        return APPLICATION_ERROR;
+    }
+
     char ethDstAddr[ETH_ADDR_STR_LEN]{};                                /* destination eth addr	*/
     char ethSrcAddr[ETH_ADDR_STR_LEN]{};                                /* source ether addr	*/
     uint16_t ether_type = ntohs(ethHeader->ether_type);		            /* packet type ID field	*/
+    std::cout << "PrintPacketData() ether_type: " << ether_type << std::endl;
 
     ether_addr ethHdrDstAddr{};
     memcpy(ethHdrDstAddr.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
@@ -141,16 +139,16 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
-    unsigned short int ar_hrd = ntohs(arpHeader->arpHdr.ar_hrd);		/* Format of hardware address.  */
-    unsigned short int ar_pro = ntohs(arpHeader->arpHdr.ar_pro);		/* Format of protocol address.  */
-    unsigned char ar_hln = arpHeader->arpHdr.ar_hln;		            /* Length of hardware address.  */
-    unsigned char ar_pln = arpHeader->arpHdr.ar_pln;		            /* Length of protocol address.  */
-    unsigned short int ar_op = ntohs(arpHeader->arpHdr.ar_op);		    /* ARP opcode (command).  */
+    uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);     /* Format of hardware address.  */
+    uint16_t ar_pro = ntohs(arpHeader->ar_pro);     /* Format of protocol address.  */
+    uint8_t ar_hln = arpHeader->ar_hln;             /* Length of hardware address.  */
+    uint8_t ar_pln = arpHeader->ar_pln;             /* Length of protocol address.  */
+    uint16_t ar_op = ntohs(arpHeader->ar_op);		/* ARP opcode (command).  */
 
-    char ar_sha[ETH_ADDR_STR_LEN]{};                                    /* Sender hardware address.  */
-    char ar_sip[INET_ADDRSTRLEN]{};                                     /* Sender IP address.  */
-    char ar_tha[ETH_ADDR_STR_LEN]{};                                    /* Target hardware address.  */
-    char ar_tip[INET_ADDRSTRLEN]{};                                     /* Target IP address.  */
+    char ar_sha[ETH_ADDR_STR_LEN]{};                /* Sender hardware address.  */
+    char ar_sip[INET_ADDRSTRLEN]{};                 /* Sender IP address.  */
+    char ar_tha[ETH_ADDR_STR_LEN]{};                /* Target hardware address.  */
+    char ar_tip[INET_ADDRSTRLEN]{};                 /* Target IP address.  */
 
     if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
     {
@@ -214,6 +212,21 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
             memcpy(GetData(), packet, ETH_HLEN);
             protocol = ntohs(((ether_header*)packet)->ether_type);
             ethHeader = (ether_header*)GetLayerStart(GetNLayers() - 1);
+
+            ether_addr ethAddrSrc{};
+            memcpy(ethAddrSrc.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
+            char ethHdrSrcMacStr[ETH_ADDR_STR_LEN]{};
+            ether_ntoa_r(&ethAddrSrc, ethHdrSrcMacStr);
+            ether_addr ethAddrDst{};
+            memcpy(ethAddrDst.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
+            char ethHdrDstMacStr[ETH_ADDR_STR_LEN]{};
+            ether_ntoa_r(&ethAddrDst, ethHdrDstMacStr);
+            uint16_t eType = ntohs(ethHeader->ether_type);
+
+            std::cout <<  "ProcessReceivedPacket() ether type: " << eType << std::endl;
+            std::cout << "ProcessReceivedPacket() src mac: " << ethHdrSrcMacStr << std::endl;
+            std::cout << "ProcessReceivedPacket() dst mac: " << ethHdrDstMacStr << std::endl;
+
             packet += ETH_HLEN;
             break;
         }

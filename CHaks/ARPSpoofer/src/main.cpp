@@ -113,8 +113,19 @@ int main(int argc, char** argv)
         sleep(2);
 
         PacketCraft::ARPPacket arpPacket;
-        arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST);
-        arpPacket.Send(socketFd, interfaceName);
+        if(arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Create() error!");
+            continue;
+        }
+
+        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
+            continue;
+        }
+        std::cout << "ARP request packet sent:\n" << std::endl;
+        arpPacket.PrintPacketData();
 
         if(arpPacket.Receive(socketFd, 0, 5000) == NO_ERROR)
         {
