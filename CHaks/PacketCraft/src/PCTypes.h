@@ -19,7 +19,7 @@
 #define NO_ERROR            0
 #define APPLICATION_ERROR   1
 
-#define ETH_ADDR_STR_LEN    17
+#define ETH_ADDR_STR_LEN    18
 
 typedef int32_t bool32;
 

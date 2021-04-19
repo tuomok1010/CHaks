@@ -119,13 +119,15 @@ int main(int argc, char** argv)
             continue;
         }
 
+        std::cout << "ARP packet created:\n";
+        arpPacket.PrintPacketData();
+
         if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
         {
             LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
             continue;
         }
         std::cout << "ARP request packet sent:\n" << std::endl;
-        arpPacket.PrintPacketData();
 
         if(arpPacket.Receive(socketFd, 0, 5000) == NO_ERROR)
         {

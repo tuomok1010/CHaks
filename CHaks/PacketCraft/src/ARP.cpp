@@ -24,7 +24,7 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
 {
     FreePacket();
 
-    AddLayer(PC_ETHER_II, sizeof(ether_header));
+    AddLayer(PC_ETHER_II, ETH_HLEN);
     ethHeader = (ether_header*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
@@ -42,15 +42,64 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
     memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
 
+
+    // eth layer for printing
+    ether_addr srcMACEth{};
+    char srcMACStr[ETH_ADDR_STR_LEN]{};
+    ether_addr dstMACEth{};
+    char dstMACStr[ETH_ADDR_STR_LEN]{};
+    uint16_t ethType = ntohs(ethHeader->ether_type);
+    memcpy(srcMACEth.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
+    ether_ntoa_r(&srcMACEth, srcMACStr);
+    memcpy(dstMACEth.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
+    ether_ntoa_r(&dstMACEth, dstMACStr);
+
+    std::cout 
+        << "ARPPacket::Create() eth layer:\n"
+        << "src MAC: " << srcMACStr << "\n"
+        << "dst MAC: " << dstMACStr << "\n"
+        << "ether type: " << ethType << "\n" << std::endl;
+
+    // arp layer for printing
+    ether_addr srcMACArp{};
+    char srcMACArpStr[ETH_ADDR_STR_LEN]{};
+    ether_addr dstMACArp{};
+    char dstMACArpStr[ETH_ADDR_STR_LEN]{};
+    memcpy(srcMACArp.ether_addr_octet, arpHeader->ar_sha, ETH_ALEN);
+    ether_ntoa_r(&srcMACArp, srcMACArpStr);
+    memcpy(dstMACArp.ether_addr_octet, arpHeader->ar_tha, ETH_ALEN);
+    ether_ntoa_r(&dstMACArp, dstMACArpStr);
+    char srcIPArpStr[INET_ADDRSTRLEN]{};
+    char dstIPArpStr[INET_ADDRSTRLEN]{};
+    inet_ntop(AF_INET, arpHeader->ar_sip, srcIPArpStr, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, arpHeader->ar_tip, dstIPArpStr, INET_ADDRSTRLEN);
+    uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);    
+    uint16_t ar_pro = ntohs(arpHeader->ar_pro);    
+    uint32_t ar_hln = /*arpHeader->ar_hln*/ 5;             
+    uint32_t ar_pln = /*arpHeader->ar_pln*/ 10;             
+    uint16_t ar_op = ntohs(arpHeader->ar_op);
+
+    std::cout
+        << "ARPPacket::Create() arp layer:\n"
+        << "hardware format: " << ar_hrd << "\n"
+        << "protocol format: " << ar_pro << "\n"
+        << "hardware length: " << ar_hln << "\n"
+        << "protocol length: " << ar_pln << "\n"
+        << "opcode: " << ar_op << "\n"
+        << "src mac: " << srcMACArpStr << "\n"
+        << "src ip: " << srcIPArpStr << "\n"
+        << "dst mac: " << dstMACArpStr << "\n"
+        << "src ip: " << dstIPArpStr << "\n" << std::endl;
+
     return NO_ERROR;
 }
 
 int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, ARPType type)
 {
-    ether_addr srcMAC;
-    ether_addr dstMAC;
-    sockaddr_in srcIP;
-    sockaddr_in dstIP;
+    ether_addr srcMAC{};
+    ether_addr dstMAC{};
+    sockaddr_in srcIP{};
+    sockaddr_in dstIP{};
 
     if(ether_aton_r(srcMACStr, &srcMAC) == nullptr)
     {
@@ -121,7 +170,6 @@ int PacketCraft::ARPPacket::PrintPacketData() const
     char ethDstAddr[ETH_ADDR_STR_LEN]{};                                /* destination eth addr	*/
     char ethSrcAddr[ETH_ADDR_STR_LEN]{};                                /* source ether addr	*/
     uint16_t ether_type = ntohs(ethHeader->ether_type);		            /* packet type ID field	*/
-    std::cout << "PrintPacketData() ether_type: " << ether_type << std::endl;
 
     ether_addr ethHdrDstAddr{};
     memcpy(ethHdrDstAddr.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
@@ -139,10 +187,12 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
+    // IMPORTANT: casting arpHeader->ar_hln and arpHeader->ar_pln into a uint16_t because
+    //            std::cout doesn't print uint8_t properly!!!
     uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);     /* Format of hardware address.  */
     uint16_t ar_pro = ntohs(arpHeader->ar_pro);     /* Format of protocol address.  */
-    uint8_t ar_hln = arpHeader->ar_hln;             /* Length of hardware address.  */
-    uint8_t ar_pln = arpHeader->ar_pln;             /* Length of protocol address.  */
+    uint16_t ar_hln = (uint16_t)arpHeader->ar_hln;  /* Length of hardware address.  */
+    uint16_t ar_pln = (uint16_t)arpHeader->ar_pln;  /* Length of protocol address.  */
     uint16_t ar_op = ntohs(arpHeader->ar_op);		/* ARP opcode (command).  */
 
     char ar_sha[ETH_ADDR_STR_LEN]{};                /* Sender hardware address.  */
@@ -191,7 +241,7 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         << "protocol type: "        << ar_pro       << "\n"
         << "hardware size: "        << ar_hln       << "\n"
         << "protocol size: "        << ar_pln       << "\n"
-        << "op code: "              << ar_op        << "(" << (ar_op == 1 ? "request" : "reply") << ")\n"
+        << "op code: "              << ar_op        << " (" << (ar_op == 1 ? "request" : "reply") << ")\n"
         << "sender MAC address: "   << ar_sha       << "\n"
         << "sender IP address: "    << ar_sip       << "\n"
         << "target MAC address: "   << ar_tha       << "\n"

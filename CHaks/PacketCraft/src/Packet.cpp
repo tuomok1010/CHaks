@@ -46,15 +46,6 @@ int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSi
 
     memcpy(newData, data, sizeInBytes);
 
-/*
-    std::cout 
-        << "Adding layer of type "  << layerType 
-        << " with size "            << layerSize
-        << ". Old size is "         << sizeInBytes
-        << ". New size is "         << newDataSize 
-        << std::endl;
-*/
-
     if(data)
     {           
         free(data);
@@ -162,8 +153,9 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short p
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(data, packet, ETH_HLEN);
-            protocol = ((ethhdr*)packet)->h_proto;
-            (ethhdr*)packet++;
+            protocol = ntohs(((ether_header*)packet)->ether_type);
+            packet += ETH_HLEN;
+            break;
         }
         case ETH_P_ARP:
         {
@@ -188,17 +180,20 @@ void PacketCraft::Packet::FreePacket()
     if(data)
     {
         free(data);
-        data = nullptr;
-        sizeInBytes = 0;
-        nLayers = 0;
+    }
+    
+    data = nullptr;
+    start = nullptr;
+    end = nullptr;
+    sizeInBytes = 0;
+    nLayers = 0;
 
-        for(int i = 0; i < PC_MAX_LAYERS; ++i)
-        {
-            layerInfos[i].type = PC_NONE;
-            layerInfos[i].sizeInBytes = 0;
-            layerInfos[i].start = nullptr;
-            layerInfos[i].end = nullptr;
-        }
+    for(int i = 0; i < PC_MAX_LAYERS; ++i)
+    {
+        layerInfos[i].type = PC_NONE;
+        layerInfos[i].sizeInBytes = 0;
+        layerInfos[i].start = nullptr;
+        layerInfos[i].end = nullptr;
     }
 }
 
