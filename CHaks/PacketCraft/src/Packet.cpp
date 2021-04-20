@@ -46,23 +46,12 @@ int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSi
 
     memcpy(newData, data, sizeInBytes);
 
-    if(data)
-    {           
+    if(data)    
         free(data);
-    }
     
-    data = malloc(newDataSize);
-    if(data == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
-        return APPLICATION_ERROR;
-    }
-
-    memcpy(data, newData, newDataSize);
-    free(newData);
-
-    end = (uint8_t*)data + newDataSize;
+    data = newData;
     start = (uint8_t*)data;
+    end = (uint8_t*)data + newDataSize;
 
     layerInfos[nLayers].start = (uint8_t*)end - layerSize;
     layerInfos[nLayers].end = (uint8_t*) end;
@@ -181,7 +170,7 @@ void PacketCraft::Packet::FreePacket()
     {
         free(data);
     }
-    
+
     data = nullptr;
     start = nullptr;
     end = nullptr;

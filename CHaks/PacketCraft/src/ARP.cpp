@@ -30,6 +30,22 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_ARP);
 
+    std::cout << "looping through src mac: ";
+    for(int i = 0; i < 6; ++i)
+    {
+        std::cout << std::hex << (uint32_t)ethHeader->ether_shost[i] << std::dec << ":";
+    }
+    std::cout << std::endl;
+ 
+    std::cout << "looping through dst mac: ";
+    for(int i = 0; i < 6; ++i)
+    {
+        std::cout << std::hex << (uint32_t)ethHeader->ether_dhost[i] << std::dec << ":";
+    }
+    std::cout << std::endl;
+
+    std::cout << "eth type: " << std::hex << ethHeader->ether_type << std::dec << std::endl;
+
     AddLayer(PC_ARP, sizeof(ARPHeader));
     arpHeader = (ARPHeader*)GetLayerStart(1);
     arpHeader->ar_hrd = htons(ARPHRD_ETHER);
@@ -42,54 +58,21 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
     memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
 
+    std::cout << "looping through src mac after adding arp layer: ";
+    for(int i = 0; i < 6; ++i)
+    {
+        std::cout << std::hex << (uint32_t)ethHeader->ether_shost[i] << ":";
+    }
+    std::cout << std::endl;
 
-    // eth layer for printing
-    ether_addr srcMACEth{};
-    char srcMACStr[ETH_ADDR_STR_LEN]{};
-    ether_addr dstMACEth{};
-    char dstMACStr[ETH_ADDR_STR_LEN]{};
-    uint16_t ethType = ntohs(ethHeader->ether_type);
-    memcpy(srcMACEth.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
-    ether_ntoa_r(&srcMACEth, srcMACStr);
-    memcpy(dstMACEth.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
-    ether_ntoa_r(&dstMACEth, dstMACStr);
+    std::cout << "looping through dst mac after adding arp layer: ";
+    for(int i = 0; i < 6; ++i)
+    {
+        std::cout << std::hex << (uint32_t)ethHeader->ether_dhost[i] << ":";
+    }
+    std::cout << std::endl;
 
-    std::cout 
-        << "ARPPacket::Create() eth layer:\n"
-        << "src MAC: " << srcMACStr << "\n"
-        << "dst MAC: " << dstMACStr << "\n"
-        << "ether type: " << ethType << "\n" << std::endl;
-
-    // arp layer for printing
-    ether_addr srcMACArp{};
-    char srcMACArpStr[ETH_ADDR_STR_LEN]{};
-    ether_addr dstMACArp{};
-    char dstMACArpStr[ETH_ADDR_STR_LEN]{};
-    memcpy(srcMACArp.ether_addr_octet, arpHeader->ar_sha, ETH_ALEN);
-    ether_ntoa_r(&srcMACArp, srcMACArpStr);
-    memcpy(dstMACArp.ether_addr_octet, arpHeader->ar_tha, ETH_ALEN);
-    ether_ntoa_r(&dstMACArp, dstMACArpStr);
-    char srcIPArpStr[INET_ADDRSTRLEN]{};
-    char dstIPArpStr[INET_ADDRSTRLEN]{};
-    inet_ntop(AF_INET, arpHeader->ar_sip, srcIPArpStr, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, arpHeader->ar_tip, dstIPArpStr, INET_ADDRSTRLEN);
-    uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);    
-    uint16_t ar_pro = ntohs(arpHeader->ar_pro);    
-    uint32_t ar_hln = /*arpHeader->ar_hln*/ 5;             
-    uint32_t ar_pln = /*arpHeader->ar_pln*/ 10;             
-    uint16_t ar_op = ntohs(arpHeader->ar_op);
-
-    std::cout
-        << "ARPPacket::Create() arp layer:\n"
-        << "hardware format: " << ar_hrd << "\n"
-        << "protocol format: " << ar_pro << "\n"
-        << "hardware length: " << ar_hln << "\n"
-        << "protocol length: " << ar_pln << "\n"
-        << "opcode: " << ar_op << "\n"
-        << "src mac: " << srcMACArpStr << "\n"
-        << "src ip: " << srcIPArpStr << "\n"
-        << "dst mac: " << dstMACArpStr << "\n"
-        << "src ip: " << dstIPArpStr << "\n" << std::endl;
+    std::cout << "eth type after adding arp layer: " << std::hex << ethHeader->ether_type << std::dec << std::endl;
 
     return NO_ERROR;
 }
@@ -187,8 +170,8 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
-    // IMPORTANT: casting arpHeader->ar_hln and arpHeader->ar_pln into a uint16_t because
-    //            std::cout doesn't print uint8_t properly!!!
+    /* IMPORTANT: casting arpHeader->ar_hln and arpHeader->ar_pln into a uint16_t because
+    std::cout doesn't print uint8_t properly!!! */
     uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);     /* Format of hardware address.  */
     uint16_t ar_pro = ntohs(arpHeader->ar_pro);     /* Format of protocol address.  */
     uint16_t ar_hln = (uint16_t)arpHeader->ar_hln;  /* Length of hardware address.  */

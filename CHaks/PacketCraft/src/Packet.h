@@ -7,6 +7,18 @@
 
 #include "PCTypes.h"
 
+/*
+    TODO: IMPORTANT!!:
+    When adding a new layer, we are freeing the old memory, allocating a new block and assigning the old data pointer to it. However, 
+    all the start/end pointers of the previous layers in layerInfos[] will still be pointing to the old memory addresses. This is also 
+    the cause of the bug in ARP class where the ethHeader* points to garbage values after adding the arp layer into the packet. 
+
+    Perhaps fix this by making a single memory allocation for a packet buffer either here in the Packet constructor, OR take a pointer
+    as a constructor parameter and do the allocation in the application that uses this lib. The packet buffer should be large enough 
+    to hold any packet, maybe IP_MAXPACKET size. 
+
+*/
+
 namespace PacketCraft
 {
     struct LayerInfo

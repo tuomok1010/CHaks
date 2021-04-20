@@ -106,6 +106,8 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    PacketCraft::PrintMACAddr(myMAC, "my mac print test: ", "\n");
+
     ether_addr dstMAC{};
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
     {
@@ -120,6 +122,7 @@ int main(int argc, char** argv)
         }
 
         std::cout << "ARP packet created:\n";
+
         arpPacket.PrintPacketData();
 
         if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
