@@ -17,34 +17,18 @@ PacketCraft::ARPPacket::ARPPacket():
 
 PacketCraft::ARPPacket::~ARPPacket()
 {
-    FreePacket();
+
 }
 
 int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, ARPType type)
 {
-    FreePacket();
+    ResetPacketBuffer();
 
     AddLayer(PC_ETHER_II, ETH_HLEN);
     ethHeader = (ether_header*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_ARP);
-
-    std::cout << "looping through src mac: ";
-    for(int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << (uint32_t)ethHeader->ether_shost[i] << std::dec << ":";
-    }
-    std::cout << std::endl;
- 
-    std::cout << "looping through dst mac: ";
-    for(int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << (uint32_t)ethHeader->ether_dhost[i] << std::dec << ":";
-    }
-    std::cout << std::endl;
-
-    std::cout << "eth type: " << std::hex << ethHeader->ether_type << std::dec << std::endl;
 
     AddLayer(PC_ARP, sizeof(ARPHeader));
     arpHeader = (ARPHeader*)GetLayerStart(1);
@@ -57,22 +41,6 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
     memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
     memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
-
-    std::cout << "looping through src mac after adding arp layer: ";
-    for(int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << (uint32_t)ethHeader->ether_shost[i] << ":";
-    }
-    std::cout << std::endl;
-
-    std::cout << "looping through dst mac after adding arp layer: ";
-    for(int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << (uint32_t)ethHeader->ether_dhost[i] << ":";
-    }
-    std::cout << std::endl;
-
-    std::cout << "eth type after adding arp layer: " << std::hex << ethHeader->ether_type << std::dec << std::endl;
 
     return NO_ERROR;
 }
@@ -130,6 +98,13 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
     return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 }
 
+void PacketCraft::ARPPacket::ResetPacketBuffer()
+{
+    PacketCraft::Packet::ResetPacketBuffer();
+    ethHeader = nullptr;
+    arpHeader = nullptr;
+}
+
 void PacketCraft::ARPPacket::FreePacket()
 {
     PacketCraft::Packet::FreePacket();
@@ -150,38 +125,25 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
-    char ethDstAddr[ETH_ADDR_STR_LEN]{};                                /* destination eth addr	*/
-    char ethSrcAddr[ETH_ADDR_STR_LEN]{};                                /* source ether addr	*/
-    uint16_t ether_type = ntohs(ethHeader->ether_type);		            /* packet type ID field	*/
+    char ethDstAddr[ETH_ADDR_STR_LEN]{};    /* destination eth addr	*/
+    char ethSrcAddr[ETH_ADDR_STR_LEN]{};    /* source ether addr	*/
 
-    ether_addr ethHdrDstAddr{};
-    memcpy(ethHdrDstAddr.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
-    if(ether_ntoa_r(&ethHdrDstAddr, ethDstAddr) == nullptr)
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
-    ether_addr ethHdrSrcAddr{};
-    memcpy(ethHdrSrcAddr.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
-    if(ether_ntoa_r(&ethHdrSrcAddr, ethSrcAddr) == nullptr)
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
-    /* IMPORTANT: casting arpHeader->ar_hln and arpHeader->ar_pln into a uint16_t because
-    std::cout doesn't print uint8_t properly!!! */
-    uint16_t ar_hrd = ntohs(arpHeader->ar_hrd);     /* Format of hardware address.  */
-    uint16_t ar_pro = ntohs(arpHeader->ar_pro);     /* Format of protocol address.  */
-    uint16_t ar_hln = (uint16_t)arpHeader->ar_hln;  /* Length of hardware address.  */
-    uint16_t ar_pln = (uint16_t)arpHeader->ar_pln;  /* Length of protocol address.  */
-    uint16_t ar_op = ntohs(arpHeader->ar_op);		/* ARP opcode (command).  */
-
-    char ar_sha[ETH_ADDR_STR_LEN]{};                /* Sender hardware address.  */
-    char ar_sip[INET_ADDRSTRLEN]{};                 /* Sender IP address.  */
-    char ar_tha[ETH_ADDR_STR_LEN]{};                /* Target hardware address.  */
-    char ar_tip[INET_ADDRSTRLEN]{};                 /* Target IP address.  */
+    char ar_sha[ETH_ADDR_STR_LEN]{};    /* Sender hardware address.  */
+    char ar_sip[INET_ADDRSTRLEN]{};     /* Sender IP address.  */
+    char ar_tha[ETH_ADDR_STR_LEN]{};    /* Target hardware address.  */
+    char ar_tip[INET_ADDRSTRLEN]{};     /* Target IP address.  */
 
     if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
     {
@@ -195,17 +157,13 @@ int PacketCraft::ARPPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
-    ether_addr senderMACAddr{};
-    memcpy(senderMACAddr.ether_addr_octet, arpHeader->ar_sha, ETH_ALEN);
-    if(ether_ntoa_r(&senderMACAddr, ar_sha) == nullptr)
+    if(ether_ntoa_r((ether_addr*)arpHeader->ar_sha, ar_sha) == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
-    ether_addr targetMACAddr{};
-    memcpy(targetMACAddr.ether_addr_octet, arpHeader->ar_tha, ETH_ALEN);
-    if(ether_ntoa_r(&targetMACAddr, ar_tha) == nullptr)
+    if(ether_ntoa_r((ether_addr*)arpHeader->ar_tha, ar_tha) == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
@@ -215,20 +173,20 @@ int PacketCraft::ARPPacket::PrintPacketData() const
     std::cout
         << " = = = = = = = = = = = = = = = = = = = = \n"
         << "[ETHERNET]:\n"
-        << "destination: "          << ethDstAddr   << "\n"
-        << "source: "               << ethSrcAddr   << "\n"
-        << "type: "                 << ether_type   << "\n"
+        << "destination: "          << ethDstAddr << "\n"
+        << "source: "               << ethSrcAddr << "\n"
+        << "type: "                 << ntohs(ethHeader->ether_type) << "\n"
         << " - - - - - - - - - - - - - - - - - - - - \n"
         << "[ARP]:\n"
-        << "hardware type: "        << ar_hrd       << "\n"
-        << "protocol type: "        << ar_pro       << "\n"
-        << "hardware size: "        << ar_hln       << "\n"
-        << "protocol size: "        << ar_pln       << "\n"
-        << "op code: "              << ar_op        << " (" << (ar_op == 1 ? "request" : "reply") << ")\n"
-        << "sender MAC address: "   << ar_sha       << "\n"
-        << "sender IP address: "    << ar_sip       << "\n"
-        << "target MAC address: "   << ar_tha       << "\n"
-        << "target IP address: "    << ar_tip       << "\n"
+        << "hardware type: "        << ntohs(arpHeader->ar_hrd) << "\n"
+        << "protocol type: "        << ntohs(arpHeader->ar_pro) << "\n"
+        << "hardware size: "        << (uint16_t)arpHeader->ar_hln << "\n"
+        << "protocol size: "        << (uint16_t)arpHeader->ar_pln << "\n"
+        << "op code: "              << ntohs(arpHeader->ar_op) << " (" << (ntohs(arpHeader->ar_op) == 1 ? "request" : "reply") << ")\n"
+        << "sender MAC address: "   << ar_sha << "\n"
+        << "sender IP address: "    << ar_sip << "\n"
+        << "target MAC address: "   << ar_tha << "\n"
+        << "target IP address: "    << ar_tip << "\n"
         << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
 
     return NO_ERROR;
@@ -245,21 +203,6 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
             memcpy(GetData(), packet, ETH_HLEN);
             protocol = ntohs(((ether_header*)packet)->ether_type);
             ethHeader = (ether_header*)GetLayerStart(GetNLayers() - 1);
-
-            ether_addr ethAddrSrc{};
-            memcpy(ethAddrSrc.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
-            char ethHdrSrcMacStr[ETH_ADDR_STR_LEN]{};
-            ether_ntoa_r(&ethAddrSrc, ethHdrSrcMacStr);
-            ether_addr ethAddrDst{};
-            memcpy(ethAddrDst.ether_addr_octet, ethHeader->ether_dhost, ETH_ALEN);
-            char ethHdrDstMacStr[ETH_ADDR_STR_LEN]{};
-            ether_ntoa_r(&ethAddrDst, ethHdrDstMacStr);
-            uint16_t eType = ntohs(ethHeader->ether_type);
-
-            std::cout <<  "ProcessReceivedPacket() ether type: " << eType << std::endl;
-            std::cout << "ProcessReceivedPacket() src mac: " << ethHdrSrcMacStr << std::endl;
-            std::cout << "ProcessReceivedPacket() dst mac: " << ethHdrDstMacStr << std::endl;
-
             packet += ETH_HLEN;
             break;
         }
@@ -272,7 +215,7 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
         }
         default:
         {
-            FreePacket();
+            ResetPacketBuffer();
             LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
             return APPLICATION_ERROR;
         }

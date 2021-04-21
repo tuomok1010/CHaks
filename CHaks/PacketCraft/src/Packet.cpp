@@ -17,7 +17,8 @@ PacketCraft::Packet::Packet():
     start(nullptr),
     end(nullptr),
     sizeInBytes(0),
-    nLayers(0)
+    nLayers(0),
+    outsideBufferSupplied(FALSE)
 {
     for(int i = 0; i < PC_MAX_LAYERS; ++i)
     {
@@ -26,30 +27,55 @@ PacketCraft::Packet::Packet():
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
     }
+
+    data = malloc(IP_MAXPACKET);
+    if(data == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
+    }
+
+    start = (uint8_t*)data;
+    end = (uint8_t*)data;
+}
+
+PacketCraft::Packet::Packet(void* packetBuffer):
+    data(nullptr),
+    start(nullptr),
+    end(nullptr),
+    sizeInBytes(0),
+    nLayers(0),
+    outsideBufferSupplied(TRUE)
+{
+    for(int i = 0; i < PC_MAX_LAYERS; ++i)
+    {
+        layerInfos[i].type = PC_NONE;
+        layerInfos[i].sizeInBytes = 0;
+        layerInfos[i].start = nullptr;
+        layerInfos[i].end = nullptr;
+    }
+
+    data = packetBuffer;
+    if(data == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "buffer supplied is null!");
+    }
+
+    start = (uint8_t*)data;
+    end = (uint8_t*)data;
 }
 
 PacketCraft::Packet::~Packet()
 {
-    FreePacket();
+    if(outsideBufferSupplied == FALSE)
+    {
+        FreePacket();
+    }
 }
 
 int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
 {
     size_t newDataSize = layerSize + sizeInBytes;
-    void* newData = malloc(newDataSize);
-
-    if(newData == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
-        return APPLICATION_ERROR;
-    }
-
-    memcpy(newData, data, sizeInBytes);
-
-    if(data)    
-        free(data);
     
-    data = newData;
     start = (uint8_t*)data;
     end = (uint8_t*)data + newDataSize;
 
@@ -116,7 +142,7 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
         }
         else
         {
-            FreePacket();
+            ResetPacketBuffer();
             if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
@@ -131,6 +157,27 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
 
     LOG_ERROR(APPLICATION_ERROR, "unknown error!");
     return APPLICATION_ERROR;
+}
+
+void PacketCraft::Packet::ResetPacketBuffer()
+{
+    if(data)
+    {
+        memset(data, 0, sizeInBytes);
+    }
+
+    start = (uint8_t*)data;
+    end = (uint8_t*)data;
+    sizeInBytes = 0;
+    nLayers = 0;
+
+    for(int i = 0; i < PC_MAX_LAYERS; ++i)
+    {
+        layerInfos[i].type = PC_NONE;
+        layerInfos[i].sizeInBytes = 0;
+        layerInfos[i].start = nullptr;
+        layerInfos[i].end = nullptr;
+    }
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
@@ -154,7 +201,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short p
         }
         default:
         {
-            FreePacket();
+            ResetPacketBuffer();
             LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
             return APPLICATION_ERROR;
         }

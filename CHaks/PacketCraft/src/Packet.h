@@ -34,12 +34,15 @@ namespace PacketCraft
     {
         public:
         Packet();
+        Packet(void* packetBuffer);
         ~Packet();
 
         // Check PCTypes.h for valid layerTypes
         int AddLayer(const uint32_t layerType, const size_t layerSize);
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
+        void ResetPacketBuffer();
+
         virtual int ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader);
         virtual void FreePacket();
 
@@ -64,6 +67,8 @@ namespace PacketCraft
 
         int sizeInBytes;
         uint32_t nLayers;
+
+        bool32 outsideBufferSupplied;
     };
 }
 

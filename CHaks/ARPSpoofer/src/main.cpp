@@ -106,13 +106,10 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    PacketCraft::PrintMACAddr(myMAC, "my mac print test: ", "\n");
-
     ether_addr dstMAC{};
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
     {
         std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
-        sleep(2);
 
         PacketCraft::ARPPacket arpPacket;
         if(arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
@@ -121,42 +118,19 @@ int main(int argc, char** argv)
             continue;
         }
 
-        std::cout << "ARP packet created:\n";
-
-        arpPacket.PrintPacketData();
-
         if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
         {
             LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
             continue;
         }
-        std::cout << "ARP request packet sent:\n" << std::endl;
 
         if(arpPacket.Receive(socketFd, 0, 5000) == NO_ERROR)
         {
-            std::cout << "Received ARP packet:\n\n";
-            arpPacket.PrintPacketData();
+            sockaddr_in ipAddr{};
+            ipAddr.sin_family = AF_INET;
+            memcpy(&ipAddr.sin_addr.s_addr, arpPacket.arpHeader->ar_sip, IPV4_ALEN);
 
-            char ip[INET_ADDRSTRLEN]{};
-            char mac[ETH_ADDR_STR_LEN]{};
-
-            if(inet_ntop(AF_INET, arpPacket.arpHeader->ar_sip, ip, INET_ADDRSTRLEN) == nullptr)
-            {
-                close(socketFd);
-                LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-                return APPLICATION_ERROR;
-            }
-
-            ether_addr macAddr{};
-            memcpy(macAddr.ether_addr_octet, arpPacket.arpHeader->ar_sha, ETH_ALEN);
-            if(ether_ntoa_r(&macAddr, mac) == nullptr)
-            {
-                close(socketFd);
-                LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
-                return APPLICATION_ERROR;
-            }
-
-            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ip, mac) == APPLICATION_ERROR)
+            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpPacket.arpHeader->ar_sha) == APPLICATION_ERROR)
             {
                 close(socketFd);
                 LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
