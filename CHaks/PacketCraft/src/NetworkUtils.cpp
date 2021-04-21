@@ -46,6 +46,36 @@ int PacketCraft::GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const
     }
 }
 
+int PacketCraft::GetMACAddr(char* ethAddrStr, const char* interfaceName, const int socketFd)
+{
+    ether_addr ethAddr{};
+    if(GetMACAddr(ethAddr, interfaceName, socketFd) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetMACAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r(&ethAddr, ethAddrStr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;
+}
+
+int PacketCraft::GetMACAddr(char* ethAddrStr, const int interfaceIndex, const int socketFd)
+{
+    char ifName[IFNAMSIZ];
+    if(if_indextoname(interfaceIndex, ifName) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetMACAddr(ethAddrStr, ifName, socketFd);
+}
+
 // TODO: finish/test
 int PacketCraft::GetIPAddr(sockaddr_in& addr, const char* interfaceName)
 {
@@ -103,8 +133,6 @@ int PacketCraft::GetIPAddr(sockaddr_in6& addr, const char* interfaceName)
     return NO_ERROR;
 }
 
-// TODO: TEST!! Make sure the cast to sockaddr_in/sockaddr_in6 works since the GetIPAddr funcs take references instead
-// of pointers!!!
 int PacketCraft::GetIPAddr(sockaddr_storage& addr, const char* interfaceName)
 {
     int result{APPLICATION_ERROR};
@@ -117,6 +145,37 @@ int PacketCraft::GetIPAddr(sockaddr_storage& addr, const char* interfaceName)
         LOG_ERROR(APPLICATION_ERROR, "Unknown address family");
 
     return result;
+}
+
+int PacketCraft::GetIPAddr(char* ipAddrStr, const char* interfaceName, const int af)
+{
+    sockaddr_storage ipAddr;
+    ipAddr.ss_family = af;
+
+    if(GetIPAddr(ipAddr, interfaceName) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(af == AF_INET)
+    {
+        if(inet_ntop(AF_INET, &((sockaddr_in*)&ipAddr)->sin_addr, ipAddrStr, INET_ADDRSTRLEN) == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+            return APPLICATION_ERROR;
+        }
+    }
+    else if(af == AF_INET6)
+    {
+        if(inet_ntop(AF_INET6, &((sockaddr_in6*)&ipAddr)->sin6_addr, ipAddrStr, INET6_ADDRSTRLEN) == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return NO_ERROR;
 }
 
 int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr)
@@ -139,7 +198,7 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
     return NO_ERROR;
 }
 
-int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr)
+int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, char*  macAddrStr)
 {
     sockaddr_in ipAddr{};
     if(inet_pton(AF_INET, ipAddrStr, &ipAddr.sin_addr) <= 0)
@@ -148,7 +207,20 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
         return APPLICATION_ERROR;
     }
 
-    return GetARPTableMACAddr(socketFd, interfaceName, ipAddr, macAddr);
+    ether_addr macAddr{};
+    if(GetARPTableMACAddr(socketFd, interfaceName, ipAddr, macAddr) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetARPTableMACAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r(&macAddr, macAddrStr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;
 }
 
 int PacketCraft::AddAddrToARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, const ether_addr& macAddr)

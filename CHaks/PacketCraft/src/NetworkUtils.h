@@ -7,14 +7,19 @@ namespace PacketCraft
 {
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);
+    int GetMACAddr(char* ethAddrStr, const char* interfaceName, const int socketFd);
+    int GetMACAddr(char* ethAddrStr, const int interfaceIndex, const int socketFd);
+
     int GetIPAddr(sockaddr_in& addr, const char* interfaceName);
     int GetIPAddr(sockaddr_in6& addr, const char* interfaceName);
     int GetIPAddr(sockaddr_storage& addr, const char* interfaceName);
+    int GetIPAddr(char* ipAddrStr, const char* interfaceName, const int af);
+
     int GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr);
-    int GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, ether_addr& macAddr);
+    int GetARPTableMACAddr(const int socketFd, const char* interfaceName, const char* ipAddrStr, char* macAddrStr);
+
     int AddAddrToARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, const ether_addr& macAddr);
     int AddAddrToARPTable(const int socketFd, const char* interfaceName, const char* ipAddrStr, const char* macAddrStr);
-
 
     int EnablePortForwarding();
     int DisablePortForwarding();

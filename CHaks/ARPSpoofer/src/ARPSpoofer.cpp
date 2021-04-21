@@ -8,8 +8,7 @@
 #include <arpa/inet.h> 
 #include <sys/ioctl.h> 
 
-ARPSpoof::ARPSpoofer::ARPSpoofer() :
-    timeElapsed(0.0f)
+ARPSpoof::ARPSpoofer::ARPSpoofer()
 {
 
 }
@@ -17,6 +16,48 @@ ARPSpoof::ARPSpoofer::ARPSpoofer() :
 ARPSpoof::ARPSpoofer::~ARPSpoofer()
 {
 
+}
+
+int ARPSpoof::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* interfaceName, const char* srcIPStr, const char* srcMACStr, 
+    const char* targetIPStr, char* targetMACStr)
+{
+    while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, targetIPStr, targetMACStr) == APPLICATION_ERROR)
+    {
+        std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
+
+        PacketCraft::ARPPacket arpPacket;
+        if(arpPacket.Create(srcMACStr, "ff:ff:ff:ff:ff:ff", srcIPStr, targetIPStr, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Create() error!");
+            return APPLICATION_ERROR;
+        }
+
+        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
+            return APPLICATION_ERROR;
+        }
+
+        if(arpPacket.Receive(socketFd, 0, ARP_REQ_TIMEOUT_MS) == NO_ERROR)
+        {
+            sockaddr_in ipAddr{};
+            ipAddr.sin_family = AF_INET;
+            memcpy(&ipAddr.sin_addr.s_addr, arpPacket.arpHeader->ar_sip, IPV4_ALEN);
+
+            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpPacket.arpHeader->ar_sha) == APPLICATION_ERROR)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
+                return APPLICATION_ERROR;
+            }
+        }
+        else
+        {
+            std::cout << "Could not get target MAC address." << std::endl;
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return NO_ERROR;
 }
 
 int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, const PacketCraft::ARPPacket& arpPacket)

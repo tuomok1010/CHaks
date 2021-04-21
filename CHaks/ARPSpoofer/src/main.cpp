@@ -54,8 +54,6 @@ int ProcessArgs(int argc, char** argv, char* ifName, char* srcIP, char* dstIP, b
 
 int main(int argc, char** argv)
 {
-    sockaddr_in myIP{};
-    ether_addr myMAC{};
     char myIPStr[INET_ADDRSTRLEN]{};
     char myMACStr[ETH_ADDR_STR_LEN]{};
 
@@ -78,88 +76,55 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    if(PacketCraft::GetIPAddr(myIP, interfaceName) == APPLICATION_ERROR)
+    if(PacketCraft::GetIPAddr(myIPStr, interfaceName, AF_INET) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetIPAddr() error!");
         return APPLICATION_ERROR;
     }
 
-    if(inet_ntop(AF_INET, &myIP.sin_addr, myIPStr, INET_ADDRSTRLEN) == nullptr)
-    {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(PacketCraft::GetMACAddr(myMAC, interfaceName, socketFd) == APPLICATION_ERROR)
+    if(PacketCraft::GetMACAddr(myMACStr, interfaceName, socketFd) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetMACAddr() error!");
         return APPLICATION_ERROR;
     }
 
-    if(ether_ntoa_r(&myMAC, myMACStr) == nullptr)
+    ARPSpoof::ARPSpoofer arpSpoofer;
+
+    char dstMACStr[ETH_ADDR_STR_LEN]{};
+    if(arpSpoofer.GetTargetMACAddr(socketFd, interfaceName, myIPStr, myMACStr, dstIPStr, dstMACStr) == APPLICATION_ERROR)
     {
         close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ARPSpoof::ARPSpoofer::GetTargetMACAddr() error!");
         return APPLICATION_ERROR;
     }
-
-    ether_addr dstMAC{};
-    while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, dstIPStr, dstMAC) == APPLICATION_ERROR)
-    {
-        std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
-
-        PacketCraft::ARPPacket arpPacket;
-        if(arpPacket.Create(myMACStr, "ff:ff:ff:ff:ff:ff", myIPStr, dstIPStr, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Create() error!");
-            continue;
-        }
-
-        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
-            continue;
-        }
-
-        if(arpPacket.Receive(socketFd, 0, 5000) == NO_ERROR)
-        {
-            sockaddr_in ipAddr{};
-            ipAddr.sin_family = AF_INET;
-            memcpy(&ipAddr.sin_addr.s_addr, arpPacket.arpHeader->ar_sip, IPV4_ALEN);
-
-            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpPacket.arpHeader->ar_sha) == APPLICATION_ERROR)
-            {
-                close(socketFd);
-                LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
-                return APPLICATION_ERROR;
-            }
-        }
-    }
-
-
-
 
     if(portForward == TRUE)
     {
         if(PacketCraft::EnablePortForwarding() == APPLICATION_ERROR)
         {
+            close(socketFd);
             LOG_ERROR(APPLICATION_ERROR, "could not enable port forwarding\n");
             return APPLICATION_ERROR;
         }
     }
 
+    if(arpSpoofer.SpoofLoop(socketFd, interfaceName, myMACStr, dstMACStr, srcIPStr, dstIPStr) == APPLICATION_ERROR)
+    {
+        close(socketFd);
 
-    ARPSpoof::ARPSpoofer arpSpoofer;
+        if(portForward == TRUE)
+            PacketCraft::DisablePortForwarding();
 
+        LOG_ERROR(APPLICATION_ERROR, "ARPSppoof::ARPSpoofer::SpoofLoop() error!");
+        return APPLICATION_ERROR;
+    }
 
     if(portForward == TRUE)
         PacketCraft::DisablePortForwarding();
 
-
     std::cout << "closing socket and exiting program...\n";
-    close(socketFd);
-    return 0;
+    close(socketFd);   
+    return NO_ERROR;
 }
