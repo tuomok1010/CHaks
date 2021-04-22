@@ -17,10 +17,13 @@ namespace ARPSpoof
         int GetTargetMACAddr(const int socketFd, const char* interfaceName, const char* srcIPStr, const char* srcMACStr, 
             const char* targetIPStr, char* targetMACStr);
 
-        int Spoof(const int socketFd, const char* interfaceName, const PacketCraft::ARPPacket& arpPacket);
-        int SpoofLoop(const int socketFd, const char* interfaceName, const char* srcMAC, const char* dstMAC, const char* srcIP, const char* dstIP);
+        int Spoof(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+            const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth);
+        int SpoofLoop(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+            const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth);
 
-        int RestoreTarget();
+        int RestoreTargets(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+            const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth);
     };
 }
 #endif
