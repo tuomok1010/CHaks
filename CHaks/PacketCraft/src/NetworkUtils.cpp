@@ -209,6 +209,76 @@ int PacketCraft::GetNetworkMask(sockaddr_in& mask, const int interfaceIndex, con
     return GetNetworkMask(mask, ifName, socketFd);
 }
 
+int PacketCraft::GetBroadcastAddr(sockaddr_in& broadcastAddr, const char* interfaceName, const int socketFd)
+{
+    ifreq ifr{};
+    CopyStr(ifr.ifr_name, sizeof(ifr.ifr_name), interfaceName);
+
+    int result{};
+    result = ioctl(socketFd, SIOCGIFBRDADDR, &ifr);
+    if(result >= 0)
+    {
+        memcpy(&broadcastAddr.sin_addr, &((sockaddr_in*)&ifr.ifr_ifru.ifru_broadaddr)->sin_addr, sizeof(broadcastAddr.sin_addr));
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::GetBroadcastAddr(sockaddr_in& broadcastAddr, const int interfaceIndex, const int socketFd)
+{
+    char ifName[IFNAMSIZ];
+    if(if_indextoname(interfaceIndex, ifName) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetBroadcastAddr(broadcastAddr, ifName, socketFd);
+}
+
+int PacketCraft::GetNetworkAddr(sockaddr_in& networkAddr, const sockaddr_in& broadcastAddr, const int nHostBits)
+{
+    uint32_t broadcast32 = ntohl(broadcastAddr.sin_addr.s_addr);
+    networkAddr.sin_addr.s_addr = htonl((broadcast32 >> nHostBits) << nHostBits);
+
+    return NO_ERROR;
+}
+
+int PacketCraft::GetNetworkAddr(sockaddr_in& networkAddr, const char* interfaceName, const int socketFd)
+{
+    int nHostBits{};
+    if(GetNumHostBits(nHostBits, interfaceName, socketFd) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetNumHostBits() error!");
+        return APPLICATION_ERROR;
+    }
+
+    sockaddr_in broadcastAddr{};
+    if(GetBroadcastAddr(broadcastAddr, interfaceName, socketFd) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetBroadcastAddr() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetNetworkAddr(networkAddr, broadcastAddr, nHostBits);
+}
+
+int PacketCraft::GetNetworkAddr(sockaddr_in& networkAddr, const int interfaceIndex, const int socketFd)
+{
+    char ifName[IFNAMSIZ];
+    if(if_indextoname(interfaceIndex, ifName) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetNetworkAddr(networkAddr, ifName, socketFd);
+}
+
 int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr)
 {
     arpreq arpEntry{};
@@ -256,8 +326,7 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
 
 int PacketCraft::GetNumHostBits(const sockaddr_in& networkMask)
 {
-    uint32_t mask32 = networkMask.sin_addr.s_addr;
-    mask32 = ntohl(mask32);
+    uint32_t mask32 = ntohl(networkMask.sin_addr.s_addr);
 
     for(int i = 0; i < IPV4_ALEN * 8; ++i)
     {
@@ -271,11 +340,10 @@ int PacketCraft::GetNumHostBits(const sockaddr_in& networkMask)
     return 0;
 }
 
-int PacketCraft::GetNumHostBits(int& nBits, const sockaddr_in& addr, const char* interfaceName, const int socketFd)
+int PacketCraft::GetNumHostBits(int& nBits, const char* interfaceName, const int socketFd)
 {
     ifreq ifr{};
     CopyStr(ifr.ifr_name, sizeof(ifr.ifr_name), interfaceName);
-    memcpy(&ifr.ifr_ifru.ifru_addr, (sockaddr*)&addr, sizeof(sockaddr));
 
     sockaddr_in mask{};
 
