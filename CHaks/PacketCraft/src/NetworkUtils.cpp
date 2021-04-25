@@ -178,6 +178,37 @@ int PacketCraft::GetIPAddr(char* ipAddrStr, const char* interfaceName, const int
     return NO_ERROR;
 }
 
+int PacketCraft::GetNetworkMask(sockaddr_in& mask, const char* interfaceName, const int socketFd)
+{
+    ifreq ifr{};
+    CopyStr(ifr.ifr_name, sizeof(ifr.ifr_name), interfaceName);
+
+    int result{};
+    result = ioctl(socketFd, SIOCGIFNETMASK, &ifr);
+    if(result >= 0)
+    {
+        memcpy(&mask.sin_addr, &((sockaddr_in*)&ifr.ifr_ifru.ifru_netmask)->sin_addr, sizeof(mask.sin_addr));
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::GetNetworkMask(sockaddr_in& mask, const int interfaceIndex, const int socketFd)
+{
+    char ifName[IFNAMSIZ];
+    if(if_indextoname(interfaceIndex, ifName) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return GetNetworkMask(mask, ifName, socketFd);
+}
+
 int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, ether_addr& macAddr)
 {
     arpreq arpEntry{};
@@ -221,6 +252,46 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
     }
 
     return NO_ERROR;
+}
+
+int PacketCraft::GetNumHostBits(const sockaddr_in& networkMask)
+{
+    uint32_t mask32 = networkMask.sin_addr.s_addr;
+    mask32 = ntohl(mask32);
+
+    for(int i = 0; i < IPV4_ALEN * 8; ++i)
+    {
+        uint32_t result = ((mask32 >> i) & 1);
+        if(result == 1)
+        {
+            return i;
+        }
+    }
+
+    return 0;
+}
+
+int PacketCraft::GetNumHostBits(int& nBits, const sockaddr_in& addr, const char* interfaceName, const int socketFd)
+{
+    ifreq ifr{};
+    CopyStr(ifr.ifr_name, sizeof(ifr.ifr_name), interfaceName);
+    memcpy(&ifr.ifr_ifru.ifru_addr, (sockaddr*)&addr, sizeof(sockaddr));
+
+    sockaddr_in mask{};
+
+    int result{};
+    result = ioctl(socketFd, SIOCGIFNETMASK, &ifr);
+    if(result >= 0)
+    {
+        memcpy(&mask.sin_addr, &((sockaddr_in*)&ifr.ifr_ifru.ifru_netmask)->sin_addr, sizeof(mask.sin_addr));
+        nBits = GetNumHostBits(mask);
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
 }
 
 int PacketCraft::AddAddrToARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, const ether_addr& macAddr)

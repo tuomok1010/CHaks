@@ -1,13 +1,8 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 
 #include <netinet/in.h>
-#include <arpa/inet.h> 
 #include <iostream>
-
 #include <unistd.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
 
 #include "ARPSpoofer.h"
 
@@ -155,7 +150,10 @@ int main(int argc, char** argv)
     }
 
     if(portForward == TRUE)
+    {
+        std::cout << "disabling port forwarding...\n";
         PacketCraft::DisablePortForwarding();
+    }
 
     std::cout << "closing socket and exiting program...\n";
     close(socketFd);   

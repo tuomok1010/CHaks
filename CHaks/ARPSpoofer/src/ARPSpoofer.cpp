@@ -76,7 +76,8 @@ int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, c
         return APPLICATION_ERROR;
     }
 
-    std::cout << "sending ARP packet to " << target1MACStr << " (" << target1IPStr << "): " << yourMAC << " is at " << target2IPStr << "\n";
+    std::cout << "sending ARP packet to " << target1MACStr << " (" << target1IPStr << "): " << yourMAC 
+    << " is at " << target2IPStr << " (press enter key to stop)" << "\n";
 
     if(spoofBoth == TRUE)
     {
@@ -92,7 +93,9 @@ int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, c
             return APPLICATION_ERROR;
         }
 
-        std::cout << "sending ARP packet to " << target2MACStr << " (" << target2IPStr << "): " << yourMAC << " is at " << target1IPStr << "\n";
+        std::cout 
+            << "sending ARP packet to " << target2MACStr << " (" << target2IPStr << "): " << yourMAC 
+            << " is at " << target1IPStr << " (press enter key to stop)" << "\n";
     }
 
     return NO_ERROR;
