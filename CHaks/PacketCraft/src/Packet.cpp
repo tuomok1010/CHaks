@@ -29,10 +29,13 @@ PacketCraft::Packet::Packet():
     }
 
     data = malloc(IP_MAXPACKET);
+
+    /*
     if(data == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
     }
+    */
 
     start = (uint8_t*)data;
     end = (uint8_t*)data;
@@ -55,10 +58,12 @@ PacketCraft::Packet::Packet(void* packetBuffer):
     }
 
     data = packetBuffer;
+    /*
     if(data == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "buffer supplied is null!");
     }
+    */
 
     start = (uint8_t*)data;
     end = (uint8_t*)data;
@@ -96,7 +101,7 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
     bytesSent = sendto(socket, data, sizeInBytes, flags, dst, dstSize);
     if(bytesSent != sizeInBytes)
     {
-        LOG_ERROR(APPLICATION_ERROR, "sendto() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "sendto() error!");
         return APPLICATION_ERROR;
     }
 
@@ -119,12 +124,12 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
     int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
     if(nEvents == -1)
     {
-        LOG_ERROR(APPLICATION_ERROR, "poll() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "poll() error!");
         return APPLICATION_ERROR;
     }
     else if(nEvents == 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
+        // LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
         return APPLICATION_ERROR;
     }
     else if(pollFds[0].revents & POLLIN)
@@ -132,12 +137,12 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
         bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
         if(bytesReceived == -1)
         {
-            LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
+            // LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
             return APPLICATION_ERROR;
         }
         else if(bytesReceived == 0)
         {
-            LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
+            // LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
             return APPLICATION_ERROR;
         }
         else
@@ -145,7 +150,7 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
             ResetPacketBuffer();
             if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
             {
-                LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
+                // LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
                 return APPLICATION_ERROR;
             }
             else
@@ -155,7 +160,7 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
         }
     }
 
-    LOG_ERROR(APPLICATION_ERROR, "unknown error!");
+    // LOG_ERROR(APPLICATION_ERROR, "unknown error!");
     return APPLICATION_ERROR;
 }
 
@@ -202,7 +207,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short p
         default:
         {
             ResetPacketBuffer();
-            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            // LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
             return APPLICATION_ERROR;
         }
     }

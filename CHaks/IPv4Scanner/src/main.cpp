@@ -1,10 +1,11 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
+#include "IPv4Scanner.h"
 
 #include <iostream>
 #include <arpa/inet.h>
 
 // TODO: make this more bulletproof
-int ProcessArgs(int argc, char** argv, const char* ifName)
+int ProcessArgs(int argc, char** argv, char* ifName)
 {
     if(argc != 2)
     {
@@ -18,7 +19,7 @@ int ProcessArgs(int argc, char** argv, const char* ifName)
         return APPLICATION_ERROR;
     }
 
-    PacketCraft::CopyStr(ifName, PacketCraft::GetStrLen(ifName), argv[1]);
+    PacketCraft::CopyStr(ifName, IFNAMSIZ, argv[1]);
 
     return NO_ERROR;
 }
@@ -26,13 +27,13 @@ int ProcessArgs(int argc, char** argv, const char* ifName)
 int main(int argc, char** argv)
 {
     char ifName[IFNAMSIZ]{};
-    if(ProcessArgs(argc, argv) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, ifName) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ARP));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
@@ -67,7 +68,20 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    // NOTE: this was originally planned to be used in a multithreaded program. Right now it does nothing.
     bool32 running{TRUE};
+
+    IPv4Scan::IPv4Scanner scanner{};
+
+    scanner.SendARPPackets(ifName, socketFd, myIP, myMAC, networkAddr, broadcastAddr, running);
+
+    std::cout << "scanning...press enter to stop\n";
+
+    scanner.ReceiveARPPackets(ifName, socketFd, running);
+
+    std::cout << "exiting..." << std::endl;
+
+    close(socketFd);
 
     return NO_ERROR;
 }

@@ -16,9 +16,9 @@ namespace IPv4Scan
 
         int ReceiveARPPackets(const char* interfaceName, const int socketFd, bool32& running);
 
-        int ProcessReceivedPacket(const char* interfaceName, const int socketFd);
-
-        void PrintARPTableContents(const char* interfaceName, const int socketFd);
+        private:
+        int ProcessReceivedPacket(const char* interfaceName, const int socketFd, bool32 printHeader);
+        int PrintResult(const ether_addr& macAddr, const sockaddr_in& ipAddr, bool32 printHeader);
     };
 }
 

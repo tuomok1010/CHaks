@@ -34,6 +34,9 @@ namespace PacketCraft
     int AddAddrToARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipAddr, const ether_addr& macAddr);
     int AddAddrToARPTable(const int socketFd, const char* interfaceName, const char* ipAddrStr, const char* macAddrStr);
 
+    int RemoveAddrFromARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipToRemove);
+    int RemoveAddrFromARPTable(const int socketFd, const char* interfaceName, const char* ipToRemoveStr);
+
     int EnablePortForwarding();
     int DisablePortForwarding();
 

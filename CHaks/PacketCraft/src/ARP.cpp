@@ -54,25 +54,25 @@ int PacketCraft::ARPPacket::Create(const char* srcMACStr, const char* dstMACStr,
 
     if(ether_aton_r(srcMACStr, &srcMAC) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_aton_r(dstMACStr, &dstMAC) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(inet_pton(AF_INET, srcIPStr, &srcIP.sin_addr) <= 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
     }
 
     if(inet_pton(AF_INET, dstIPStr, &dstIP.sin_addr) <= 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
     }
 
@@ -84,7 +84,7 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
     int ifIndex = if_nametoindex(interfaceName);
     if(ifIndex == 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_nametoindex() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_nametoindex() error!");
         return APPLICATION_ERROR;
     }
 
@@ -116,12 +116,12 @@ int PacketCraft::ARPPacket::PrintPacketData() const
 {
     if(ethHeader == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ethHeader is null!");
+        // LOG_ERROR(APPLICATION_ERROR, "ethHeader is null!");
         return APPLICATION_ERROR;
     }
     if(arpHeader == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "arpHeader is null!");
+        // LOG_ERROR(APPLICATION_ERROR, "arpHeader is null!");
         return APPLICATION_ERROR;
     }
 
@@ -130,13 +130,13 @@ int PacketCraft::ARPPacket::PrintPacketData() const
 
     if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
@@ -147,25 +147,25 @@ int PacketCraft::ARPPacket::PrintPacketData() const
 
     if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 
     if(inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)arpHeader->ar_sha, ar_sha) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)arpHeader->ar_tha, ar_tha) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
@@ -216,7 +216,7 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
         default:
         {
             ResetPacketBuffer();
-            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            // LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
             return APPLICATION_ERROR;
         }
     }

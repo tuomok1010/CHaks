@@ -25,7 +25,7 @@ int PacketCraft::GetMACAddr(ether_addr& ethAddr, const char* interfaceName, cons
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -41,7 +41,7 @@ int PacketCraft::GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -51,13 +51,13 @@ int PacketCraft::GetMACAddr(char* ethAddrStr, const char* interfaceName, const i
     ether_addr ethAddr{};
     if(GetMACAddr(ethAddr, interfaceName, socketFd) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "GetMACAddr() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "GetMACAddr() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r(&ethAddr, ethAddrStr) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
@@ -69,7 +69,7 @@ int PacketCraft::GetMACAddr(char* ethAddrStr, const int interfaceIndex, const in
     char ifName[IFNAMSIZ];
     if(if_indextoname(interfaceIndex, ifName) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
         return APPLICATION_ERROR;
     }
 
@@ -84,7 +84,7 @@ int PacketCraft::GetIPAddr(sockaddr_in& addr, const char* interfaceName)
     int result = getifaddrs(&ifAddrs);
     if(result == -1)
     {
-        LOG_ERROR(APPLICATION_ERROR, "getifaddrs() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "getifaddrs() error!");
         return APPLICATION_ERROR;
     }
 
@@ -112,7 +112,7 @@ int PacketCraft::GetIPAddr(sockaddr_in6& addr, const char* interfaceName)
     int result = getifaddrs(&ifAddrs);
     if(result == -1)
     {
-        LOG_ERROR(APPLICATION_ERROR, "getifaddrs() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "getifaddrs() error!");
         return APPLICATION_ERROR;
     }
 
@@ -142,7 +142,9 @@ int PacketCraft::GetIPAddr(sockaddr_storage& addr, const char* interfaceName)
     else if(addr.ss_family == AF_INET6)
         result = GetIPAddr(*(sockaddr_in6*)&addr, interfaceName);
     else
-        LOG_ERROR(APPLICATION_ERROR, "Unknown address family");
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "Unknown address family");
+    }
 
     return result;
 }
@@ -154,7 +156,7 @@ int PacketCraft::GetIPAddr(char* ipAddrStr, const char* interfaceName, const int
 
     if(GetIPAddr(ipAddr, interfaceName) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
         return APPLICATION_ERROR;
     }
 
@@ -162,7 +164,7 @@ int PacketCraft::GetIPAddr(char* ipAddrStr, const char* interfaceName, const int
     {
         if(inet_ntop(AF_INET, &((sockaddr_in*)&ipAddr)->sin_addr, ipAddrStr, INET_ADDRSTRLEN) == nullptr)
         {
-            LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+            // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
             return APPLICATION_ERROR;
         }
     }
@@ -170,7 +172,7 @@ int PacketCraft::GetIPAddr(char* ipAddrStr, const char* interfaceName, const int
     {
         if(inet_ntop(AF_INET6, &((sockaddr_in6*)&ipAddr)->sin6_addr, ipAddrStr, INET6_ADDRSTRLEN) == nullptr)
         {
-            LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+            // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
             return APPLICATION_ERROR;
         }
     }
@@ -192,7 +194,7 @@ int PacketCraft::GetNetworkMask(sockaddr_in& mask, const char* interfaceName, co
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -202,7 +204,7 @@ int PacketCraft::GetNetworkMask(sockaddr_in& mask, const int interfaceIndex, con
     char ifName[IFNAMSIZ];
     if(if_indextoname(interfaceIndex, ifName) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
         return APPLICATION_ERROR;
     }
 
@@ -223,7 +225,7 @@ int PacketCraft::GetBroadcastAddr(sockaddr_in& broadcastAddr, const char* interf
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -233,7 +235,7 @@ int PacketCraft::GetBroadcastAddr(sockaddr_in& broadcastAddr, const int interfac
     char ifName[IFNAMSIZ];
     if(if_indextoname(interfaceIndex, ifName) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
         return APPLICATION_ERROR;
     }
 
@@ -253,14 +255,14 @@ int PacketCraft::GetNetworkAddr(sockaddr_in& networkAddr, const char* interfaceN
     int nHostBits{};
     if(GetNumHostBits(nHostBits, interfaceName, socketFd) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "GetNumHostBits() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "GetNumHostBits() error!");
         return APPLICATION_ERROR;
     }
 
     sockaddr_in broadcastAddr{};
     if(GetBroadcastAddr(broadcastAddr, interfaceName, socketFd) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "GetBroadcastAddr() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "GetBroadcastAddr() error!");
         return APPLICATION_ERROR;
     }
 
@@ -272,7 +274,7 @@ int PacketCraft::GetNetworkAddr(sockaddr_in& networkAddr, const int interfaceInd
     char ifName[IFNAMSIZ];
     if(if_indextoname(interfaceIndex, ifName) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "if_indextoname() error!");
         return APPLICATION_ERROR;
     }
 
@@ -291,7 +293,7 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
     int res = ioctl(socketFd, SIOCGARP, &arpEntry);
     if(res < 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
     
@@ -304,20 +306,20 @@ int PacketCraft::GetARPTableMACAddr(const int socketFd, const char* interfaceNam
     sockaddr_in ipAddr{};
     if(inet_pton(AF_INET, ipAddrStr, &ipAddr.sin_addr) <= 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
     }
 
     ether_addr macAddr{};
     if(GetARPTableMACAddr(socketFd, interfaceName, ipAddr, macAddr) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "GetARPTableMACAddr() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "GetARPTableMACAddr() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r(&macAddr, macAddrStr) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
@@ -357,7 +359,7 @@ int PacketCraft::GetNumHostBits(int& nBits, const char* interfaceName, const int
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -375,7 +377,7 @@ int PacketCraft::AddAddrToARPTable(const int socketFd, const char* interfaceName
     int res = ioctl(socketFd, SIOCSARP, &arpEntry);
     if(res < 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
         return APPLICATION_ERROR;
     }
 
@@ -389,17 +391,47 @@ int PacketCraft::AddAddrToARPTable(const int socketFd, const char* interfaceName
 
     if(inet_pton(AF_INET, ipAddrStr, &ipAddr.sin_addr) <= 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_aton_r(macAddrStr, &macAddr) == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
         return APPLICATION_ERROR;
     }
 
     return AddAddrToARPTable(socketFd, interfaceName, ipAddr, macAddr);
+}
+
+int PacketCraft::RemoveAddrFromARPTable(const int socketFd, const char* interfaceName, const sockaddr_in& ipToRemove)
+{
+    arpreq arpEntry{};
+    arpEntry.arp_pa.sa_family = AF_INET;
+    memcpy(arpEntry.arp_pa.sa_data, ((sockaddr*)&ipToRemove)->sa_data, sizeof(arpEntry.arp_pa.sa_data));
+    PacketCraft::CopyStr(arpEntry.arp_dev, sizeof(arpEntry.arp_dev), interfaceName);
+
+    int res = ioctl(socketFd, SIOCDARP, &arpEntry);
+    if(res < 0)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;
+}
+
+int PacketCraft::RemoveAddrFromARPTable(const int socketFd, const char* interfaceName, const char* ipToRemoveStr)
+{
+    sockaddr_in ipToRemove{};
+    ipToRemove.sin_family = AF_INET;
+    if(inet_pton(AF_INET, ipToRemoveStr, &ipToRemove.sin_addr) == -1)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return RemoveAddrFromARPTable(socketFd, interfaceName, ipToRemove);
 }
 
 int PacketCraft::EnablePortForwarding()
@@ -409,7 +441,7 @@ int PacketCraft::EnablePortForwarding()
 
     if(status != 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "system() failed!");
+        // LOG_ERROR(APPLICATION_ERROR, "system() failed!");
         return APPLICATION_ERROR;
     }
 
@@ -423,7 +455,7 @@ int PacketCraft::DisablePortForwarding()
 
     if(status != 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "system() failed!");
+        // LOG_ERROR(APPLICATION_ERROR, "system() failed!");
         return APPLICATION_ERROR;
     }
 
@@ -439,7 +471,9 @@ int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, c
     else if(addr.ss_family == AF_INET6)
         result = PrintIPAddr(*(sockaddr_in6*)&addr, prefix, suffix);
     else
-        LOG_ERROR(APPLICATION_ERROR, "Unknown address family!");
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "Unknown address family!");
+    }
 
     return result;
 }
@@ -455,7 +489,7 @@ int PacketCraft::PrintIPAddr(const sockaddr_in& addr, const char* prefix, const 
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -471,7 +505,7 @@ int PacketCraft::PrintIPAddr(const sockaddr_in6& addr, const char* prefix, const
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 }
@@ -487,7 +521,7 @@ int PacketCraft::PrintMACAddr(const ether_addr& addr, const char* prefix, const 
     }
     else
     {
-        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 }
