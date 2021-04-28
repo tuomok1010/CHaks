@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <linux/if_packet.h>
 #include <netinet/in.h>
+#include <net/if.h>
+#include <netinet/ether.h>
 
 PacketCraft::ARPPacket::ARPPacket():
     ethHeader(nullptr),

@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <arpa/inet.h>
+#include <net/if.h>
+#include <unistd.h>
 
 // TODO: make this more bulletproof
 int ProcessArgs(int argc, char** argv, char* ifName)
@@ -24,6 +26,7 @@ int ProcessArgs(int argc, char** argv, char* ifName)
     return NO_ERROR;
 }
 
+// TODO: make an option to use a different protocol than ARP to do the scan. ARP spams a lot of broadcasts into the network.
 int main(int argc, char** argv)
 {
     char ifName[IFNAMSIZ]{};

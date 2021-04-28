@@ -4,7 +4,7 @@
 #include "PCTypes.h"
 #include "Packet.h"
 
-#include <net/if.h> 
+#include <netinet/if_ether.h>
 
 
 struct __attribute__((__packed__)) ARPHeader

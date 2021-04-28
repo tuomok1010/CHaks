@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <arpa/inet.h>
+#include <netinet/ether.h>
 #include <sys/ioctl.h>
 #include <poll.h>
 #include <cstring>
@@ -77,7 +78,6 @@ int IPv4Scan::IPv4Scanner::ReceiveARPPackets(const char* interfaceName, const in
         }
         else if(pollFds[0].revents & POLLIN)
         {
-            std::cout << "stopping...\n";
             running = FALSE;
             break;
         }

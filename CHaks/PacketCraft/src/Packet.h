@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#include <netinet/ether.h>
 
 #include "PCTypes.h"
 
