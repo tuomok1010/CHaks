@@ -7,11 +7,11 @@
 #define IPV6_ALEN 16
 
 // PacketCraft::Packet layer types
-#define PC_NONE             0x00000000
-#define PC_ETHER_II         0x00000001
-#define PC_ARP              0x00000002
-#define PC_IPV4             0x00000003
-#define PC_ICMPV4           0x00000004
+#define PC_NONE             0x0000
+#define PC_ETHER_II         0x0001
+#define PC_ARP              0x0002
+#define PC_IPV4             0x0003
+#define PC_ICMPV4           0x0004
 
 #define PC_MAX_LAYERS       100
 
