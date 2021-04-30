@@ -174,20 +174,19 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     char srcIPStr[INET_ADDRSTRLEN]{};
     char dstIPStr[INET_ADDRSTRLEN]{};
 
-    inet_ntop    
+    if(inet_ntop(AF_INET, &ipv4Header->ip_src, srcIPStr, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
 
-    ipv4Header->ip_hl;
-    ipv4Header->ip_v;                     
-    ipv4Header->ip_tos ;
-    ipv4Header->ip_len;
-    ipv4Header->ip_id ;
-    ipv4Header->ip_off ;
-    ipv4Header->ip_ttl ;
-    ipv4Header->ip_p ;
-    ipv4Header->ip_sum ;
-    ipv4Header->ip_src ;
-    ipv4Header->ip_dst ;
-    ipv4Header->ip_sum ;
+    if(inet_ntop(AF_INET, &ipv4Header->ip_dst, dstIPStr, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    uint32_t icmpvHeaderSizeInBytes = htons(ipv4Header->ip_len) - ETH_HLEN - htonl(ipv4Header->ip_hl);
 
     // TODO: format nicely with iomanip perhaps?
     std::cout
@@ -208,8 +207,13 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
         << "time to live: " << ipv4Header->ip_ttl << "\n"
         << "protocol: " << ipv4Header->ip_p << "\n"
         << "checksum: " << htons(ipv4Header->ip_sum) << "(" << (VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE : "verified)" ? "unverified)") << "\n"
-        << "source: " << 
-
+        << "source: " << srcIPStr << " " << "destination: " << dstIPStr << "\n"
+        << " - - - - - - - - - - - - - - - - - - - - \n"
+        << "[ICMPv4]:\n"
+        << "type: " << icmpv4Header->type << "\n"
+        << "code: " << icmpv4Header->code << "\n"
+        << "checksum: " << htons(icmpv4Header->checksum) << "(" << (VerifyIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes) == TRUE : "verified)" ? "unverified)") << "\n"
+        << "id: " << htons(icmpv4Header->un.echo.id) << " sequence: " << htons(icmpv4Header->un.echo.sequence) << std::endl;
 }
 
 int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader)
