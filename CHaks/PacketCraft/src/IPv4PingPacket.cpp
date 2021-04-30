@@ -1,10 +1,12 @@
 #include "IPv4PingPacket.h"
 
+#include <iomanip>
 #include <cstring>
 #include <netinet/ip_icmp.h>
 #include <netinet/in.h>
 #include <netinet/ether.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 
 PacketCraft::IPv4PingPacket::IPv4PingPacket();
 {
@@ -29,7 +31,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ipv4Header = (ip*)GetLayerStart(1);
     ipv4Header->ip_hl = ipHeaderLenInBytes * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_v = IPVERSION;                       // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
-    ipv4Header->ip_tos = 0;
+    ipv4Header->ip_tos = IPTOS_CLASS_CS0;
     ipv4Header->ip_len = htons(ETH_HLEN + ipHeaderLenInBytes + icmpv4HeaderLenInBytes);
     ipv4Header->ip_id = htons(0);
     ipv4Header->ip_off = htons(IP_DF);
@@ -154,6 +156,59 @@ void PacketCraft::IPv4PingPacket::ResetPacketBuffer()
 
 int PacketCraft::IPv4PingPacket::PrintPacketData() const
 {
+    char ethDstAddr[ETH_ADDR_STR_LEN]{};    /* destination eth addr	*/
+    char ethSrcAddr[ETH_ADDR_STR_LEN]{};    /* source ether addr	*/
+
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    char srcIPStr[INET_ADDRSTRLEN]{};
+    char dstIPStr[INET_ADDRSTRLEN]{};
+
+    inet_ntop    
+
+    ipv4Header->ip_hl;
+    ipv4Header->ip_v;                     
+    ipv4Header->ip_tos ;
+    ipv4Header->ip_len;
+    ipv4Header->ip_id ;
+    ipv4Header->ip_off ;
+    ipv4Header->ip_ttl ;
+    ipv4Header->ip_p ;
+    ipv4Header->ip_sum ;
+    ipv4Header->ip_src ;
+    ipv4Header->ip_dst ;
+    ipv4Header->ip_sum ;
+
+    // TODO: format nicely with iomanip perhaps?
+    std::cout
+        << " = = = = = = = = = = = = = = = = = = = = \n"
+        << "[ETHERNET]:\n"
+        << "destination: "          << ethDstAddr << "\n"
+        << "source: "               << ethSrcAddr << "\n"
+        << "type: "                 << ntohs(ethHeader->ether_type) << "\n"
+        << " - - - - - - - - - - - - - - - - - - - - \n"
+        << "[IPv4]:\n"
+        << "ip version: " << ipv4Header->ip_v << "\n"
+        << "header length: " << ipv4Header->ip_hl < "\n"
+        << "ToS: " << std::hex << ipv4Header->ip_tos << std::dec << "\n"  // TODO: print DSCP and ECN separately
+        << "total length: " << htons(ipv4Header->ip_len) << "\n"
+        << "identification: " << htons(ipv4Header->ip_id) << "\n"
+        << "flags: " << std::hex << htons(ipv4Header->ip_off) << std::dec << "(" << htons(ipv4Header->ip_off) << ")\n"
+        << "\t bit 1(Don't Fragment): " << htons(ipv4Header->ip_off) & 0x4000 << " bit 2(More Fragments): " << htons(ipv4Header->ip_off) & 0x2000 << "\n"
+        << "time to live: " << ipv4Header->ip_ttl << "\n"
+        << "protocol: " << ipv4Header->ip_p << "\n"
+        << "checksum: " << htons(ipv4Header->ip_sum) << "(" << (VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE : "verified)" ? "unverified)") << "\n"
+        << "source: " << 
 
 }
 
