@@ -24,8 +24,7 @@ PacketCraft::IPv4PingPacket::~IPv4PingPacket()
 
 }
 
-int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, 
-    const uint32_t ipHeaderLenInBytes, const uint32_t icmpv4HeaderLenInBytes, uint8_t icmpv4Type)
+int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, PingType type)
 {
     AddLayer(PC_ETHER_II, ETH_HLEN);
     ethHeader = (ether_header*)GetLayerStart(0);
@@ -33,12 +32,12 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_IP);
 
-    AddLayer(PC_IPV4, ipHeaderLenInBytes);
+    AddLayer(PC_IPV4, sizeof(*ipv4Header));
     ipv4Header = (ip*)GetLayerStart(1);
-    ipv4Header->ip_hl = ipHeaderLenInBytes * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
+    ipv4Header->ip_hl = sizeof(*ipv4Header) * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_v = IPVERSION;                       // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_tos = IPTOS_CLASS_CS0;
-    ipv4Header->ip_len = htons(ETH_HLEN + ipHeaderLenInBytes + icmpv4HeaderLenInBytes);
+    ipv4Header->ip_len = htons(ETH_HLEN + sizeof(*ipv4Header) + sizeof(*icmpv4Header));
     ipv4Header->ip_id = htons(0);
     ipv4Header->ip_off = htons(IP_DF);
     ipv4Header->ip_ttl = IPDEFTTL;
@@ -46,22 +45,21 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ipv4Header->ip_sum = htons(0);
     ipv4Header->ip_src = srcIP.sin_addr;
     ipv4Header->ip_dst = dstIP.sin_addr;
-    ipv4Header->ip_sum = htons(CalculateIPv4Checksum(ipv4Header, ipHeaderLenInBytes));
+    ipv4Header->ip_sum = htons(CalculateIPv4Checksum(ipv4Header, sizeof(*ipv4Header)));
 
-    AddLayer(PC_ICMPV4, icmpv4HeaderLenInBytes);
+    AddLayer(PC_ICMPV4, sizeof(*icmpv4Header));
     icmpv4Header = (icmphdr*)GetLayerStart(2);
-    icmpv4Header->type = icmpv4Type;
+    icmpv4Header->type = type == PingType::ECHO_REQUEST ? ICMP_ECHO : ICMP_ECHOREPLY;
     icmpv4Header->code = 0;
     icmpv4Header->un.echo.id = 0;
     icmpv4Header->un.echo.sequence = 0;
     icmpv4Header->checksum = 0;
-    icmpv4Header->checksum = htons(CalculateIPv4Checksum(icmpv4Header, icmpv4HeaderLenInBytes));
+    icmpv4Header->checksum = htons(CalculateIPv4Checksum(icmpv4Header, sizeof(*icmpv4Header)));
 
     return NO_ERROR;
 }
 
-int PacketCraft::IPv4PingPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, 
-    const uint32_t ipHeaderLenInBytes, const uint32_t icmpv4HeaderLenInBytes, uint8_t icmpv4Type)
+int PacketCraft::IPv4PingPacket::Create(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr, PingType type)
 {
     ether_addr srcMAC{};
     ether_addr dstMAC{};
@@ -92,7 +90,7 @@ int PacketCraft::IPv4PingPacket::Create(const char* srcMACStr, const char* dstMA
         return APPLICATION_ERROR;
     }
 
-    return Create(srcMAC, dstMAC, srcIP, dstIP, ipHeaderLenInBytes, icmpv4HeaderLenInBytes, icmpv4Type);
+    return Create(srcMAC, dstMAC, srcIP, dstIP, type);
 }
 
 uint16_t PacketCraft::IPv4PingPacket::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes)
@@ -192,36 +190,38 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
         return APPLICATION_ERROR;
     }
 
-    uint32_t icmpvHeaderSizeInBytes = htons(ipv4Header->ip_len) - ETH_HLEN - htonl(ipv4Header->ip_hl);
+    uint32_t icmpvHeaderSizeInBytes = htons(ipv4Header->ip_len) - ETH_HLEN - ipv4Header->ip_hl;
     const char* ipv4ChecksumVerified = VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
     const char* icmpv4ChecksumVerified = VerifyIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes) == TRUE ? "verified" : "unverified";
+    bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
+    bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
 
     // TODO: format nicely with iomanip perhaps?
     std::cout
         << " = = = = = = = = = = = = = = = = = = = = \n"
         << "[ETHERNET]:\n"
-        << "destination: "          << ethDstAddr << "\n"
-        << "source: "               << ethSrcAddr << "\n"
-        << "type: "                 << ntohs(ethHeader->ether_type) << "\n"
+        << "destination: "    << ethDstAddr << "\n"
+        << "source: "         << ethSrcAddr << "\n"
+        << "type: 0x"         << std::hex << ntohs(ethHeader->ether_type) << "(" << std::dec << ntohs(ethHeader->ether_type) << ")\n"
         << " - - - - - - - - - - - - - - - - - - - - \n"
         << "[IPv4]:\n"
-        << "ip version: " << ipv4Header->ip_v << "\n"
-        << "header length: " << ipv4Header->ip_hl << "\n"
-        << "ToS: " << std::hex << ipv4Header->ip_tos << std::dec << "\n"  // TODO: print DSCP and ECN separately
-        << "total length: " << htons(ipv4Header->ip_len) << "\n"
-        << "identification: " << htons(ipv4Header->ip_id) << "\n"
-        << "flags: " << std::hex << htons(ipv4Header->ip_off) << std::dec << "(" << htons(ipv4Header->ip_off) << ")\n"
-        << "\t bit 1(Don't Fragment): " << (htons(ipv4Header->ip_off) & 0x4000) << " bit 2(More Fragments): " << (htons(ipv4Header->ip_off) & 0x2000) << "\n"
-        << "time to live: " << ipv4Header->ip_ttl << "\n"
-        << "protocol: " << ipv4Header->ip_p << "\n"
-        << "checksum: " << htons(ipv4Header->ip_sum) << "(" << ipv4ChecksumVerified << ")" << "\n"
-        << "source: " << srcIPStr << " " << "destination: " << dstIPStr << "\n"
+        << "ip version: "     << ipv4Header->ip_v << "\n"
+        << "header length: "  << ipv4Header->ip_hl << "\n"
+        << "ToS: 0x"          << std::hex << (uint16_t)ipv4Header->ip_tos << std::dec << "\n"  // TODO: print DSCP and ECN separately
+        << "total length: "   << ntohs(ipv4Header->ip_len) << "\n"
+        << "identification: " << ntohs(ipv4Header->ip_id) << "\n"
+        << "flags: 0x"        << std::hex << ntohs(ipv4Header->ip_off) << std::dec << "(" << ntohs(ipv4Header->ip_off) << ")\n"
+        << "\t bit 1(DF): "   << flagDFSet << " bit 2(MF): " << flagMFSet << "\n"
+        << "time to live: "   << (uint16_t)ipv4Header->ip_ttl << "\n"
+        << "protocol: "       << (uint16_t)ipv4Header->ip_p << "\n"
+        << "checksum: "       << ntohs(ipv4Header->ip_sum) << "(" << ipv4ChecksumVerified << ")" << "\n"
+        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr << "\n"
         << " - - - - - - - - - - - - - - - - - - - - \n"
         << "[ICMPv4]:\n"
-        << "type: " << icmpv4Header->type << "\n"
-        << "code: " << icmpv4Header->code << "\n"
-        << "checksum: " << htons(icmpv4Header->checksum) << "(" << icmpv4ChecksumVerified << ")" << "\n"
-        << "id: " << htons(icmpv4Header->un.echo.id) << " sequence: " << htons(icmpv4Header->un.echo.sequence) << std::endl;
+        << "type: "           << (uint16_t)icmpv4Header->type << "\n"
+        << "code: "           << (uint16_t)icmpv4Header->code << "\n"
+        << "checksum: "       << ntohs(icmpv4Header->checksum) << "(" << icmpv4ChecksumVerified << ")" << "\n"
+        << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence) << std::endl;
 
     return NO_ERROR;
 }
