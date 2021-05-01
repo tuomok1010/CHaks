@@ -19,7 +19,7 @@ namespace PacketCraft
             const uint32_t ipHeaderLenInBytes, const uint32_t icmpv4HeaderLenInBytes, uint8_t icmpv4Type);
 
         uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
-        bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
+        bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes) const;
 
         int Send(const int socket, const char* interfaceName) const;
         void ResetPacketBuffer();
