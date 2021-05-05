@@ -9,6 +9,8 @@
     #define LOG_ERROR(errorCode, msg)
 #endif
 
+#define BIT_CHECK(value, nthBit) PacketCraft::CheckBit((value), (nthBit))
+
 namespace PacketCraft
 {
     // String utils
@@ -19,6 +21,9 @@ namespace PacketCraft
 
     // Debug utils
     void PrintError(const int errorCode, const char* func, const char* msg);
+
+    // Other
+    bool32 CheckBit(const int val, const int nthBit);
 }
 
 #endif

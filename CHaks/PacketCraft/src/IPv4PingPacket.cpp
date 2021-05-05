@@ -10,6 +10,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <linux/if_packet.h>
 
 PacketCraft::IPv4PingPacket::IPv4PingPacket() :
     ethHeader(nullptr),
@@ -37,7 +38,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ipv4Header->ip_hl = sizeof(*ipv4Header) * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_v = IPVERSION;                       // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_tos = IPTOS_CLASS_CS0;
-    ipv4Header->ip_len = htons(ETH_HLEN + sizeof(*ipv4Header) + sizeof(*icmpv4Header));
+    ipv4Header->ip_len = htons(sizeof(*ipv4Header) + sizeof(*icmpv4Header));
     ipv4Header->ip_id = htons(0);
     ipv4Header->ip_off = htons(IP_DF);
     ipv4Header->ip_ttl = IPDEFTTL;
@@ -45,7 +46,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ipv4Header->ip_sum = htons(0);
     ipv4Header->ip_src = srcIP.sin_addr;
     ipv4Header->ip_dst = dstIP.sin_addr;
-    ipv4Header->ip_sum = htons(CalculateIPv4Checksum(ipv4Header, sizeof(*ipv4Header)));
+    ipv4Header->ip_sum = CalculateIPv4Checksum(ipv4Header, sizeof(*ipv4Header));
 
     AddLayer(PC_ICMPV4, sizeof(*icmpv4Header));
     icmpv4Header = (icmphdr*)GetLayerStart(2);
@@ -54,7 +55,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     icmpv4Header->un.echo.id = 0;
     icmpv4Header->un.echo.sequence = 0;
     icmpv4Header->checksum = 0;
-    icmpv4Header->checksum = htons(CalculateIPv4Checksum(icmpv4Header, sizeof(*icmpv4Header)));
+    icmpv4Header->checksum = CalculateIPv4Checksum(icmpv4Header, sizeof(*icmpv4Header));
 
     return NO_ERROR;
 }
@@ -143,11 +144,15 @@ int PacketCraft::IPv4PingPacket::Send(const int socket, const char* interfaceNam
         return APPLICATION_ERROR;
     }
 
-    sockaddr_in dstInfo;
-    memcpy(&dstInfo.sin_addr.s_addr, &ipv4Header->ip_dst.s_addr, IPV4_ALEN);
-    dstInfo.sin_family = PF_PACKET;
+    sockaddr_ll sockAddr{};
+    sockAddr.sll_family = PF_PACKET;
+    sockAddr.sll_protocol = htons(ETH_P_IP);
+    sockAddr.sll_ifindex = ifIndex;
+    sockAddr.sll_halen = ETH_ALEN;
+    sockAddr.sll_hatype = htons(ARPHRD_ETHER);
+    memcpy(sockAddr.sll_addr, ethHeader->ether_shost, ETH_ALEN);
 
-    return Packet::Send(socket, 0, (sockaddr*)&dstInfo, sizeof(dstInfo));
+    return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
 }
 
 void PacketCraft::IPv4PingPacket::ResetPacketBuffer()

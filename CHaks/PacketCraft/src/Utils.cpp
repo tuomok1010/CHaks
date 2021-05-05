@@ -71,3 +71,8 @@ void PacketCraft::PrintError(const int errorCode, const char* func, const char* 
         }
     }
 }
+
+bool32 PacketCraft::CheckBit(const int val, const int nthBit)
+{
+    return ((val) & (1 << (nthBit - 1))) != 0 ? TRUE : FALSE;
+}

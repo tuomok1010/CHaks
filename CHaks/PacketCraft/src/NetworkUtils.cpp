@@ -434,6 +434,36 @@ int PacketCraft::RemoveAddrFromARPTable(const int socketFd, const char* interfac
     return RemoveAddrFromARPTable(socketFd, interfaceName, ipToRemove);
 }
 
+int PacketCraft::SetMACAddr(const int socketFd, const char* interfaceName, const ether_addr& newMACAddr)
+{
+    ifreq ifr{};
+    memcpy(ifr.ifr_ifru.ifru_hwaddr.sa_data, newMACAddr.ether_addr_octet, ETH_ALEN);
+    memcpy(ifr.ifr_ifrn.ifrn_name, interfaceName, GetStrLen(interfaceName));
+    ifr.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
+
+    int res = ioctl(socketFd, SIOCSIFHWADDR, &ifr);
+    if(res < 0)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "ioctl() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;  
+}
+
+int PacketCraft::SetMACAddr(const int socketFd, const char* interfaceName, const char* newMACAddrStr)
+{
+    ether_addr macAddr{};
+
+    if(ether_aton_r(newMACAddrStr, &macAddr) == nullptr)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return SetMACAddr(socketFd, interfaceName, macAddr);
+}
+
 int PacketCraft::EnablePortForwarding()
 {
     int status{};

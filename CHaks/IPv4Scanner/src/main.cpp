@@ -6,6 +6,15 @@
 #include <net/if.h>
 #include <unistd.h>
 
+void PrintHelp(char** argv)
+{
+    std::cout
+        << "To use the program, provide the arguments in the following format:\n"
+        << argv[0] << " <interface name>\n\n"
+        << "<interface name>: the interface you wish to sent the packets from.\n"
+        << std::endl;
+}
+
 // TODO: make this more bulletproof
 int ProcessArgs(int argc, char** argv, char* ifName)
 {
@@ -33,6 +42,7 @@ int main(int argc, char** argv)
     if(ProcessArgs(argc, argv, ifName) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
+        PrintHelp();
         return APPLICATION_ERROR;
     }
 
