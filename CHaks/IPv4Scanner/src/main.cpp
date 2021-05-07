@@ -18,6 +18,12 @@ void PrintHelp(char** argv)
 // TODO: make this more bulletproof
 int ProcessArgs(int argc, char** argv, char* ifName)
 {
+    if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
+    {
+        PrintHelp(argv);
+        exit(EXIT_SUCCESS);
+    }
+    
     if(argc != 2)
     {
         LOG_ERROR(APPLICATION_ERROR, "invalid args error!");

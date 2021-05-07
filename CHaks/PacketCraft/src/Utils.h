@@ -24,6 +24,7 @@ namespace PacketCraft
 
     // Other
     bool32 CheckBit(const int val, const int nthBit);
+
 }
 
 #endif
