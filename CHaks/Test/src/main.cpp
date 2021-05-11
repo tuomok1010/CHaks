@@ -1,5 +1,4 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
-#include "IPv4Scanner.h"
 
 #include <iostream>
 #include <arpa/inet.h>
@@ -52,38 +51,22 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
         return APPLICATION_ERROR;
     }
 
-    sockaddr_in networkAddr{};
-    if(PacketCraft::GetNetworkAddr(networkAddr, ifName, socketFd) == APPLICATION_ERROR)
-    {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "GetNetworkAddr() error!");
-        return APPLICATION_ERROR;
-    }
-
-    sockaddr_in broadcastAddr{};
-    if(PacketCraft::GetBroadcastAddr(broadcastAddr, ifName, socketFd) == APPLICATION_ERROR)
-    {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "GetBroadcastAddr() error!");
-        return APPLICATION_ERROR;
-    }
-
-    sockaddr_in myIP{};
-    if(PacketCraft::GetIPAddr(myIP, ifName) == APPLICATION_ERROR)
+    char myIP[INET_ADDRSTRLEN]{};
+    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
         return APPLICATION_ERROR;
     }
 
-    ether_addr myMAC{};
+    char myMAC[ETH_ADDR_STR_LEN]{};
     if(PacketCraft::GetMACAddr(myMAC, ifName, socketFd) == APPLICATION_ERROR)
     {
         close(socketFd);
@@ -91,18 +74,18 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    // NOTE: this was originally planned to be used in a multithreaded program. Right now it does nothing.
-    bool32 running{TRUE};
+    const char* dstIP = "10.0.2.1";
+    const char* dstMAC = "52:54:00:12:35:00";
 
-    IPv4Scan::IPv4Scanner scanner{};
+    PacketCraft::IPv4PingPacket pingPacket;
+    if(pingPacket.Create(myMAC, dstMAC, myIP, dstIP, PingType::ECHO_REQUEST) == APPLICATION_ERROR)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Create() error!");
+        return APPLICATION_ERROR;
+    }
 
-    scanner.SendARPPackets(ifName, socketFd, myIP, myMAC, networkAddr, broadcastAddr, running);
-
-    std::cout << "scanning...press enter to stop\n";
-
-    scanner.ReceiveARPPackets(ifName, socketFd, running);
-
-    std::cout << "exiting..." << std::endl;
+    pingPacket.PrintPacketData();
 
     close(socketFd);
 

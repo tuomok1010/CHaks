@@ -194,7 +194,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short p
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(data, packet, ETH_HLEN);
-            protocol = ntohs(((ether_header*)packet)->ether_type);
+            protocol = ntohs(((EthHeader*)packet)->ether_type);
             packet += ETH_HLEN;
             break;
         }

@@ -33,9 +33,10 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_IP);
 
-    AddLayer(PC_IPV4, sizeof(*ipv4Header));
+    // TODO: continue making this work with the new IPv4 struct that has options pointer
+    AddLayer(PC_IPV4, sizeof(*ipv4Header) - sizeof(ipv4Header->options));
     ipv4Header = (ip*)GetLayerStart(1);
-    ipv4Header->ip_hl = sizeof(*ipv4Header) * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
+    ipv4Header->ip_hl = (sizeof(*ipv4Header) - sizeof(ipv4Header->options)) * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_v = IPVERSION;                       // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
     ipv4Header->ip_tos = IPTOS_CLASS_CS0;
     ipv4Header->ip_len = htons(sizeof(*ipv4Header) + sizeof(*icmpv4Header));
@@ -231,7 +232,7 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     return NO_ERROR;
 }
 
-int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader)
+int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, unsigned short protocol)
 {
     return NO_ERROR;
 }

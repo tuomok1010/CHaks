@@ -40,6 +40,12 @@ int ProcessArgs(int argc, char** argv, char* ifName, char protocols[N_PROTOCOLS_
 
     PacketCraft::CopyStr(ifName, IFNAMSIZ, argv[1]);
 
+    if(PacketCraft::CompareStr(argv[2], "ALL") == TRUE)
+    {
+        PacketCraft::CopyStr(protocols[0], PROTOCOL_NAME_SIZE, "ALL");
+        return NO_ERROR;
+    }
+
     int protoIndex{0};
     for(int i = 2; i < argc; ++i)
     {
@@ -47,8 +53,8 @@ int ProcessArgs(int argc, char** argv, char* ifName, char protocols[N_PROTOCOLS_
         {
             if(PacketCraft::CompareStr(argv[i], "ALL") == TRUE)
             {
-                PacketCraft::CopyStr(protocols[0], PROTOCOL_NAME_SIZE, "ALL");
-                return NO_ERROR;
+                LOG_ERROR(APPLICATION_ERROR, "error! ALL protocol cannot be used with other protocols!");
+                return APPLICATION_ERROR;
             }
             else
             {
@@ -69,7 +75,6 @@ int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
     char protocols[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
-    int socketFds[N_PROTOCOLS_SUPPORTED]{};
 
     if(ProcessArgs(argc, argv, interfaceName, protocols) == APPLICATION_ERROR)
     {
@@ -78,7 +83,8 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-
+    PacketSniff::PacketSniffer packetSniffer;
+    packetSniffer.Init(protocols);
 
     return NO_ERROR;
 }

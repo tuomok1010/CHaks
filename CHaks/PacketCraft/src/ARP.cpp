@@ -27,7 +27,7 @@ int PacketCraft::ARPPacket::Create(const ether_addr& srcMAC, const ether_addr& d
     ResetPacketBuffer();
 
     AddLayer(PC_ETHER_II, ETH_HLEN);
-    ethHeader = (ether_header*)GetLayerStart(0);
+    ethHeader = (EthHeader*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_ARP);
@@ -203,8 +203,8 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, unsigned shor
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(GetData(), packet, ETH_HLEN);
-            protocol = ntohs(((ether_header*)packet)->ether_type);
-            ethHeader = (ether_header*)GetLayerStart(GetNLayers() - 1);
+            protocol = ntohs(((EthHeader*)packet)->ether_type);
+            ethHeader = (EthHeader*)GetLayerStart(GetNLayers() - 1);
             packet += ETH_HLEN;
             break;
         }

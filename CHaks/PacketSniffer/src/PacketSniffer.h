@@ -10,7 +10,7 @@ namespace PacketSniff
 {
     static char supportedProtocols[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]
     {
-        "ALL", "ARP", "ICMPV4"
+        "ARP", "IPV4", "ICMPV4"
     };
 
     class PacketSniffer
@@ -19,10 +19,16 @@ namespace PacketSniff
         PacketSniffer();
         ~PacketSniffer();
 
+        int Init(char protocols[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]);
+        int ReceivePackets();
+
         static bool32 IsProtocolSupported(const char* protocol);
 
         private:
+        int ReceivePacket(const int socketFd);
 
+        int socketFds[N_PROTOCOLS_SUPPORTED]{};
+        int nSocketsUsed{};
     };
 }
 

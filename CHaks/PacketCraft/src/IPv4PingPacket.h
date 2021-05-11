@@ -2,6 +2,7 @@
 #define PC_ICMPV4_H
 
 #include "PCTypes.h"
+#include "PCHeaders.h"
 #include "Packet.h"
 
 enum class PingType
@@ -29,11 +30,11 @@ namespace PacketCraft
         void ResetPacketBuffer();
         int PrintPacketData() const;
 
-        int ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader) override;
+        int ProcessReceivedPacket(uint8_t* packet, unsigned short protocol) override;
         void FreePacket() override;
 
-        ether_header* ethHeader;
-        ip* ipv4Header;
+        EthHeader* ethHeader;
+        IPv4Header* ipv4Header;
         icmphdr* icmpv4Header;
     };
 }
