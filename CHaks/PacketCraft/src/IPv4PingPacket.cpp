@@ -27,17 +27,16 @@ PacketCraft::IPv4PingPacket::~IPv4PingPacket()
 
 int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, PingType type)
 {
-    AddLayer(PC_ETHER_II, ETH_HLEN);
-    ethHeader = (ether_header*)GetLayerStart(0);
+    AddLayer(PC_ETHER_II, sizeof(*ethHeader));
+    ethHeader = (EthHeader*)GetLayerStart(0);
     memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
     memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
     ethHeader->ether_type = htons(ETH_P_IP);
 
-    // TODO: continue making this work with the new IPv4 struct that has options pointer
-    AddLayer(PC_IPV4, sizeof(*ipv4Header) - sizeof(ipv4Header->options));
-    ipv4Header = (ip*)GetLayerStart(1);
-    ipv4Header->ip_hl = (sizeof(*ipv4Header) - sizeof(ipv4Header->options)) * 8 / 32;    // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
-    ipv4Header->ip_v = IPVERSION;                       // NOTE: this is a 4 bit bitfield value (check the struct declaration), not a 32bit unsigned int!
+    AddLayer(PC_IPV4, sizeof(*ipv4Header));
+    ipv4Header = (IPv4Header*)GetLayerStart(1);
+    ipv4Header->ip_hl = sizeof(*ipv4Header) * 8 / 32;
+    ipv4Header->ip_v = IPVERSION;                       
     ipv4Header->ip_tos = IPTOS_CLASS_CS0;
     ipv4Header->ip_len = htons(sizeof(*ipv4Header) + sizeof(*icmpv4Header));
     ipv4Header->ip_id = htons(0);
@@ -50,7 +49,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ipv4Header->ip_sum = CalculateIPv4Checksum(ipv4Header, sizeof(*ipv4Header));
 
     AddLayer(PC_ICMPV4, sizeof(*icmpv4Header));
-    icmpv4Header = (icmphdr*)GetLayerStart(2);
+    icmpv4Header = (ICMPv4Header*)GetLayerStart(2);
     icmpv4Header->type = type == PingType::ECHO_REQUEST ? ICMP_ECHO : ICMP_ECHOREPLY;
     icmpv4Header->code = 0;
     icmpv4Header->un.echo.id = 0;
@@ -232,13 +231,61 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     return NO_ERROR;
 }
 
-int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, unsigned short protocol)
+int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
 {
-    return NO_ERROR;
+    switch(protocol)
+    {
+        case 0:
+        {
+            AddLayer(PC_ETHER_II, ETH_HLEN);
+            memcpy(GetData(), packet, ETH_HLEN);
+            protocol = ntohs(((EthHeader*)packet)->ether_type);
+            ethHeader = (EthHeader*)GetLayerStart(GetNLayers() - 1);
+            packet += ETH_HLEN;
+            break;
+        }
+        case ETH_P_IP:
+        {
+            IPv4Header* ipHeader = (IPv4Header*)packet;
+            AddLayer(PC_IPV4, ipHeader->ip_hl * 32 / 8);
+            memcpy(GetLayerStart(GetNLayers() - 1), packet, ipHeader->ip_hl * 32 / 8);
+            protocol = ipHeader->ip_p;
+            ipv4Header = (IPv4Header*)GetLayerStart(GetNLayers() - 1);
+
+            // this is the next layer size
+            layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
+
+            packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
+            break;
+        }
+        case IPPROTO_ICMP:
+        {
+            AddLayer(PC_ICMPV4, layerSize);
+            memcpy(GetLayerStart(GetNLayers() - 1), packet, layerSize);
+            icmpv4Header = (ICMPv4Header*)GetLayerStart(GetNLayers() - 1);
+            return NO_ERROR;
+        }
+        default:
+        {
+            ResetPacketBuffer();
+            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return ProcessReceivedPacket(packet, layerSize, protocol);
 }
 
 void PacketCraft::IPv4PingPacket::FreePacket()
 {
+    // NOTE: are these necessary?
+    if(ipv4Header->options != nullptr)
+        free(ipv4Header->options);
+    
+    if(icmpv4Header->data != nullptr)
+        free(icmpv4Header->data);
+    //////////////////////////////
+
     PacketCraft::Packet::FreePacket();
     ethHeader = nullptr;
     ipv4Header = nullptr;

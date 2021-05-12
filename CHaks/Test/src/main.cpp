@@ -85,7 +85,15 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    std::cout << "sending the following packet: \n";
     pingPacket.PrintPacketData();
+
+    if(pingPacket.Send(socketFd, ifName) == APPLICATION_ERROR)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Send() error!");
+        return APPLICATION_ERROR;
+    }
 
     close(socketFd);
 

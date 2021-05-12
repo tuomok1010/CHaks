@@ -45,7 +45,30 @@ struct __attribute__((__packed__)) IPv4Header
     uint8_t ip_p;			        /* protocol */
     unsigned short ip_sum;		    /* checksum */
     struct in_addr ip_src, ip_dst;	/* source and dest address */
-    uint8_t* options;
+    uint8_t options[];              /* optional options field, NOTE: when doing sizeof() this struct, this will not count (C magic)*/
+};
+
+struct __attribute__((__packed__)) ICMPv4Header
+{
+    uint8_t type;		/* message type */
+    uint8_t code;		/* type sub-code */
+    uint16_t checksum;
+    union
+    {
+        struct
+        {
+            uint16_t	id;
+            uint16_t	sequence;
+        } echo;			/* echo datagram */
+        uint32_t	gateway;	/* gateway address */
+        struct
+        {
+            uint16_t	__glibc_reserved;
+            uint16_t	mtu;
+        } frag;			/* path mtu discovery */
+    } un;
+
+    uint8_t data[];
 };
 
 #endif

@@ -42,7 +42,7 @@ namespace PacketCraft
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         void ResetPacketBuffer();
 
-        virtual int ProcessReceivedPacket(uint8_t* packet, unsigned short nextHeader);
+        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = 0);
         virtual void FreePacket();
 
         void* GetLayerStart(const uint32_t layerIndex) const;

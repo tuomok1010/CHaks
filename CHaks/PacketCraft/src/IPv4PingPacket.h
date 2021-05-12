@@ -30,12 +30,12 @@ namespace PacketCraft
         void ResetPacketBuffer();
         int PrintPacketData() const;
 
-        int ProcessReceivedPacket(uint8_t* packet, unsigned short protocol) override;
+        int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short protocol = 0) override;
         void FreePacket() override;
 
         EthHeader* ethHeader;
         IPv4Header* ipv4Header;
-        icmphdr* icmpv4Header;
+        ICMPv4Header* icmpv4Header;
     };
 }
 

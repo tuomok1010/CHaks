@@ -24,7 +24,7 @@ namespace PacketCraft
         void ResetPacketBuffer();
         int PrintPacketData() const;
 
-        int ProcessReceivedPacket(uint8_t* packet, unsigned short protocol) override;
+        int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short protocol = 0) override;
         void FreePacket() override;
 
         EthHeader* ethHeader;

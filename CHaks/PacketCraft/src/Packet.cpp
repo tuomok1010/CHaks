@@ -186,7 +186,7 @@ void PacketCraft::Packet::ResetPacketBuffer()
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
-int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short protocol)
+int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
 {
     switch(protocol)
     {
@@ -204,15 +204,34 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, unsigned short p
             memcpy(GetLayerStart(nLayers - 1), packet, sizeof(ARPHeader));
             return NO_ERROR;
         }
+        case ETH_P_IP:
+        {
+            IPv4Header* ipHeader = (IPv4Header*)packet;
+            AddLayer(PC_IPV4, ipHeader->ip_hl * 32 / 8);
+            memcpy(GetLayerStart(nLayers - 1), packet, ipHeader->ip_hl * 32 / 8);
+            protocol = ipHeader->ip_p;
+
+            // this is the next layer size
+            layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
+
+            packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
+            break;
+        }
+        case IPPROTO_ICMP:
+        {
+            AddLayer(PC_ICMPV4, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+            return NO_ERROR;
+        }
         default:
         {
             ResetPacketBuffer();
-            // LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
             return APPLICATION_ERROR;
         }
     }
 
-    return ProcessReceivedPacket(packet, protocol);
+    return ProcessReceivedPacket(packet, layerSize, protocol);
 
 }
 
