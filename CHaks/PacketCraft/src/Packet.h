@@ -42,9 +42,6 @@ namespace PacketCraft
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         void ResetPacketBuffer();
 
-        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = 0);
-        virtual void FreePacket();
-
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;
         uint32_t GetLayerType(const uint32_t layerIndex) const;
@@ -54,6 +51,10 @@ namespace PacketCraft
         inline void* End() const { return end; }
         inline int GetSizeInBytes() const { return sizeInBytes; }
         inline uint32_t GetNLayers() const { return nLayers; }
+
+        protected:
+        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = 0);
+        virtual void FreePacket();
 
         /////////////////
 

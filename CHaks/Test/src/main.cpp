@@ -95,6 +95,16 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    if(pingPacket.Receive(socketFd, 0) == APPLICATION_ERROR)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Receive() error!");
+        return APPLICATION_ERROR;
+    }
+
+    std::cout << "received ping packet: \n";
+    pingPacket.PrintPacketData();
+
     close(socketFd);
 
     return NO_ERROR;

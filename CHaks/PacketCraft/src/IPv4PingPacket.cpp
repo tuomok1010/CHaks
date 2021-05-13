@@ -201,6 +201,14 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
     bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
 
+    // TODO: test
+    bool32 hasIpv4Options = ipv4Header->ip_hl > 5 ? TRUE : FALSE;
+    uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
+
+    // TODO: test
+    bool32 hasIcmpv4Data = ipv4Header->ip_len - ipv4Header->ip_hl > sizeof(ICMPv4Header) ? TRUE : FALSE;
+    uint32_t icmpv4DataSize = 
+
     // TODO: format nicely with iomanip perhaps?
     std::cout
         << " = = = = = = = = = = = = = = = = = = = = \n"
@@ -220,7 +228,21 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
         << "time to live: "   << (uint16_t)ipv4Header->ip_ttl << "\n"
         << "protocol: "       << (uint16_t)ipv4Header->ip_p << "\n"
         << "checksum: "       << ntohs(ipv4Header->ip_sum) << "(" << ipv4ChecksumVerified << ")" << "\n"
-        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr << "\n"
+        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr << "\n";
+
+    if(hasIpv4Options == TRUE)
+    {
+        int newLineAt = 7;
+        for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
+        {
+            std::cout << std::hex << ipv4Header->options[i];
+            if(i % newLineAt == 0)
+                std::cout << "\n";
+        }
+        std::cout << std::dec;
+    }
+
+    std::cout
         << " - - - - - - - - - - - - - - - - - - - - \n"
         << "[ICMPv4]:\n"
         << "type: "           << (uint16_t)icmpv4Header->type << "\n"
@@ -255,6 +277,11 @@ int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
 
+            if(ipHeader->ip_hl > 5)
+            {   
+                // checks if there is an options field present. TODO: do we need to do anything?
+            }
+
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
@@ -263,6 +290,12 @@ int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(GetNLayers() - 1), packet, layerSize);
             icmpv4Header = (ICMPv4Header*)GetLayerStart(GetNLayers() - 1);
+
+            if(layerSize > sizeof(ICMPv4Header))
+            {
+                // checks if there is a data field present. TODO: do we need to do anything?
+            }
+
             return NO_ERROR;
         }
         default:

@@ -214,6 +214,11 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
 
+            if(ipHeader->ip_hl > 5)
+            {   
+                // checks if there is an options field present. TODO: do we need to do anything?
+            }
+
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
@@ -221,6 +226,12 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
         {
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+
+            if(layerSize > sizeof(ICMPv4Header))
+            {
+                // checks if there is a data field present. TODO: do we need to do anything?
+            }
+
             return NO_ERROR;
         }
         default:
