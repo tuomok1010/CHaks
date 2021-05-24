@@ -207,7 +207,7 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
 
     // TODO: test
     bool32 hasIcmpv4Data = ipv4Header->ip_len - ipv4Header->ip_hl > sizeof(ICMPv4Header) ? TRUE : FALSE;
-    uint32_t icmpv4DataSize = 
+    uint32_t icmpv4DataSize = ipv4Header->ip_len - ipv4Header->ip_hl - sizeof(ICMPv4Header);
 
     // TODO: format nicely with iomanip perhaps?
     std::cout
@@ -248,7 +248,19 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
         << "type: "           << (uint16_t)icmpv4Header->type << "\n"
         << "code: "           << (uint16_t)icmpv4Header->code << "\n"
         << "checksum: "       << ntohs(icmpv4Header->checksum) << "(" << icmpv4ChecksumVerified << ")" << "\n"
-        << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence) << std::endl;
+        << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence) << "\n";
+
+    if(hasIcmpv4Data == TRUE)
+    {
+        int newLineAt = 7;
+        for(unsigned int i = 0; i < icmpv4DataSize; ++i)
+        {
+            std::cout << std::hex << icmpv4Header->data[i];
+            if(i % newLineAt == 0)
+                std::cout << "\n";
+        }
+        std::cout << std::dec << std::flush;
+    }
 
     return NO_ERROR;
 }

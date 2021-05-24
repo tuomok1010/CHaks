@@ -38,7 +38,7 @@ int PacketSniff::PacketSniffer::Init(char protocols[N_PROTOCOLS_SUPPORTED][PROTO
 
         if(PacketCraft::CompareStr(protocols[i], "IPV4") == TRUE || enableAllProtocols == TRUE)
         {
-            if((socketFds[socketIndex] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
+            if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
             {
                 LOG_ERROR(APPLICATION_ERROR, "socket() error!");
                 return APPLICATION_ERROR;
@@ -47,7 +47,7 @@ int PacketSniff::PacketSniffer::Init(char protocols[N_PROTOCOLS_SUPPORTED][PROTO
 
         if(PacketCraft::CompareStr(protocols[i], "ICMPV4") == TRUE || enableAllProtocols == TRUE)
         {
-            if((socketFds[socketIndex] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
+            if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
             {
                 LOG_ERROR(APPLICATION_ERROR, "socket() error!");
                 return APPLICATION_ERROR;
@@ -116,5 +116,18 @@ bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol)
 
 int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
 {
+    PacketCraft::Packet packet;
+    if(packet.Receive(socketFd, 0, -1) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Receive() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(PrintPacket(packet) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
+        return APPLICATION_ERROR;
+    }
+
     return NO_ERROR;
 }
