@@ -43,10 +43,18 @@ namespace PacketCraft
     int EnablePortForwarding();
     int DisablePortForwarding();
 
+    uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
+    bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
+
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
     int PrintIPAddr(const sockaddr_in& addr, const char* prefix = "", const char* suffix = "");
     int PrintIPAddr(const sockaddr_in6& addr, const char* prefix = "", const char* suffix = "");
     int PrintMACAddr(const ether_addr& addr, const char* prefix = "", const char* suffix = "");
+
+    int PrintEthernetLayer(EthHeader* ethHeader);
+    int PrintARPLayer(ARPHeader* arpHeader);
+    int PrintIPv4Layer(IPv4Header* ipv4Header);
+    int PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize = 0);
 }
 
 #endif

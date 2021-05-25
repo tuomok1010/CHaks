@@ -41,7 +41,7 @@ namespace PacketCraft
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         void ResetPacketBuffer();
-        int Print();
+        int Print(uint32_t layerSize = 0, unsigned short protocol = 0);
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;
@@ -70,12 +70,6 @@ namespace PacketCraft
         uint32_t nLayers;
 
         bool32 outsideBufferSupplied;
-
-        // TODO: should these be in network utils?
-        int PrintEthernetLayer(EthHeader* ethHeader);
-        int PrintARPLayer(ARPHeader* arpHeader);
-        int PrintIPv4Layer(IPv4Header* ipv4Header);
-        int PrintICMPv4Layer(ICMPv4Header* icmpv4Header);
     };
 }
 

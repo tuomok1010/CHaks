@@ -1,5 +1,6 @@
 #include "IPv4PingPacket.h"
 #include "Utils.h"
+#include "NetworkUtils.h"
 
 #include <iomanip>
 #include <iostream>
@@ -94,47 +95,6 @@ int PacketCraft::IPv4PingPacket::Create(const char* srcMACStr, const char* dstMA
     return Create(srcMAC, dstMAC, srcIP, dstIP, type);
 }
 
-uint16_t PacketCraft::IPv4PingPacket::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes)
-{
-    uint16_t* header16 = (uint16_t*)ipv4Header;
-    uint32_t sum = 0;
-    while(ipv4HeaderSizeInBytes > 1)  
-    {
-        sum += *header16++;
-        ipv4HeaderSizeInBytes -= 2;
-    }
-
-    if(ipv4HeaderSizeInBytes > 0)
-        sum += *(uint8_t*)header16;
-
-    while(sum >> 16)
-        sum = (sum & 0xffff) + (sum >> 16);
-
-    return ~(uint16_t)sum;
-}
-
-bool32 PacketCraft::IPv4PingPacket::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes) const
-{
-    uint16_t* header16 = (uint16_t*)ipv4Header;
-    uint32_t sum = 0;
-    while(ipv4HeaderSizeInBytes > 1)  
-    {
-        sum += *header16++;
-        ipv4HeaderSizeInBytes -= 2;
-    }
-
-    if(ipv4HeaderSizeInBytes > 0)
-        sum += *(uint8_t*)header16;
-
-    while(sum >> 16)
-        sum = (sum & 0xffff) + (sum >> 16);
-
-    if((uint16_t)sum == 0xffff)
-        return TRUE;
-    else
-        return FALSE;
-}
-
 int PacketCraft::IPv4PingPacket::Send(const int socket, const char* interfaceName) const
 {
     int ifIndex = if_nametoindex(interfaceName);
@@ -206,8 +166,8 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
 
     // TODO: test
-    bool32 hasIcmpv4Data = ipv4Header->ip_len - ipv4Header->ip_hl > sizeof(ICMPv4Header) ? TRUE : FALSE;
-    uint32_t icmpv4DataSize = ipv4Header->ip_len - ipv4Header->ip_hl - sizeof(ICMPv4Header);
+    bool32 hasIcmpv4Data = htons(ipv4Header->ip_len) - ipv4Header->ip_hl > (int)sizeof(ICMPv4Header) ? TRUE : FALSE;
+    uint32_t icmpv4DataSize = htons(ipv4Header->ip_len) - ipv4Header->ip_hl - sizeof(ICMPv4Header);
 
     // TODO: format nicely with iomanip perhaps?
     std::cout

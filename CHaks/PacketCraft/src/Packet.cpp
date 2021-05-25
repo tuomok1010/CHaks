@@ -1,5 +1,6 @@
 #include "Packet.h"
 #include "Utils.h"
+#include "NetworkUtils.h"
 #include "ARP.h"
 
 // general C++ stuff
@@ -185,137 +186,52 @@ void PacketCraft::Packet::ResetPacketBuffer()
     }
 }
 
-int PacketCraft::Packet::Print()
+int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol)
 {
+    static uint32_t layerIndex = 0;
 
-}
-
-int PacketCraft::Packet::PrintEthernetLayer(EthHeader* ethHeader)
-{
-    char ethDstAddr[ETH_ADDR_STR_LEN]{};    /* destination eth addr	*/
-    char ethSrcAddr[ETH_ADDR_STR_LEN]{};    /* source ether addr	*/
-
-    if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
+    switch(protocol)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
-    {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
-        return APPLICATION_ERROR;
-    }
-
-    std::cout
-    << "[ETHERNET]:\n"
-    << "destination: "    << ethDstAddr << "\n"
-    << "source: "         << ethSrcAddr << "\n"
-    << "type: 0x"         << std::hex << ntohs(ethHeader->ether_type) << "(" << std::dec << ntohs(ethHeader->ether_type) << ")\n"
-    << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
-}
-
-int PacketCraft::Packet::PrintARPLayer(ARPHeader* arpHeader)
-{
-    char ar_sha[ETH_ADDR_STR_LEN]{};    /* Sender hardware address.  */
-    char ar_sip[INET_ADDRSTRLEN]{};     /* Sender IP address.  */
-    char ar_tha[ETH_ADDR_STR_LEN]{};    /* Target hardware address.  */
-    char ar_tip[INET_ADDRSTRLEN]{};     /* Target IP address.  */
-
-    if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
-    {
-        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN) == nullptr)
-    {
-        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(ether_ntoa_r((ether_addr*)arpHeader->ar_sha, ar_sha) == nullptr)
-    {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(ether_ntoa_r((ether_addr*)arpHeader->ar_tha, ar_tha) == nullptr)
-    {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
-        return APPLICATION_ERROR;
-    }
-
-    std::cout
-    << "[ARP]:\n"
-    << "hardware type: "        << ntohs(arpHeader->ar_hrd) << "\n"
-    << "protocol type: "        << ntohs(arpHeader->ar_pro) << "\n"
-    << "hardware size: "        << (uint16_t)arpHeader->ar_hln << "\n"
-    << "protocol size: "        << (uint16_t)arpHeader->ar_pln << "\n"
-    << "op code: "              << ntohs(arpHeader->ar_op) << " (" << (ntohs(arpHeader->ar_op) == 1 ? "request" : "reply") << ")\n"
-    << "sender MAC address: "   << ar_sha << "\n"
-    << "sender IP address: "    << ar_sip << "\n"
-    << "target MAC address: "   << ar_tha << "\n"
-    << "target IP address: "    << ar_tip << "\n"
-    << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
-}
-
-int PacketCraft::Packet::PrintIPv4Layer(IPv4Header* ipv4Header)
-{
-    char srcIPStr[INET_ADDRSTRLEN]{};
-    char dstIPStr[INET_ADDRSTRLEN]{};
-
-    if(inet_ntop(AF_INET, &ipv4Header->ip_src, srcIPStr, INET_ADDRSTRLEN) == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(inet_ntop(AF_INET, &ipv4Header->ip_dst, dstIPStr, INET_ADDRSTRLEN) == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
-        return APPLICATION_ERROR;
-    }
-
-    // TODO: move VerifyIPv4Checksum() from IPv4PingPacket to network utils!
-    const char* ipv4ChecksumVerified = VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
-    bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
-    bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
-
-    // TODO: test
-    bool32 hasIpv4Options = ipv4Header->ip_hl > 5 ? TRUE : FALSE;
-    uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
-
-    std::cout
-        << "[IPv4]:\n"
-        << "ip version: "     << ipv4Header->ip_v << "\n"
-        << "header length: "  << ipv4Header->ip_hl << "\n"
-        << "ToS: 0x"          << std::hex << (uint16_t)ipv4Header->ip_tos << std::dec << "\n"  // TODO: print DSCP and ECN separately
-        << "total length: "   << ntohs(ipv4Header->ip_len) << "\n"
-        << "identification: " << ntohs(ipv4Header->ip_id) << "\n"
-        << "flags: 0x"        << std::hex << ntohs(ipv4Header->ip_off) << std::dec << "(" << ntohs(ipv4Header->ip_off) << ")\n"
-        << "\t bit 1(DF): "   << flagDFSet << " bit 2(MF): " << flagMFSet << "\n"
-        << "time to live: "   << (uint16_t)ipv4Header->ip_ttl << "\n"
-        << "protocol: "       << (uint16_t)ipv4Header->ip_p << "\n"
-        << "checksum: "       << ntohs(ipv4Header->ip_sum) << "(" << ipv4ChecksumVerified << ")" << "\n"
-        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr << "\n";
-
-    if(hasIpv4Options == TRUE)
-    {
-        int newLineAt = 7;
-        for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
+        case 0:
         {
-            std::cout << std::hex << ipv4Header->options[i];
-            if(i % newLineAt == 0)
-                std::cout << "\n";
+            EthHeader* ethHeader = (EthHeader*)GetLayerStart(layerIndex);
+            protocol = ntohs(ethHeader->ether_type);
+            PrintEthernetLayer(ethHeader);
+            ++layerIndex;
+            break;
         }
-        std::cout << std::dec << " = = = = = = = = = = = = = = = = = = = = " << std::endl;
+        case ETH_P_ARP:
+        {
+            ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(layerIndex);
+            PrintARPLayer(arpHeader);
+            return NO_ERROR;
+        }
+        case ETH_P_IP:
+        {
+            IPv4Header* ipHeader = (IPv4Header*)GetLayerStart(layerIndex);
+            protocol = ipHeader->ip_p;
+
+            // this is the next layer size
+            layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
+
+            PrintIPv4Layer(ipHeader);
+            ++layerIndex;
+            break;
+        }
+        case IPPROTO_ICMP:
+        {
+            ICMPv4Header* icmpvHeader = (ICMPv4Header*)GetLayerStart(layerIndex);
+            PrintICMPv4Layer(icmpvHeader, layerSize - sizeof(ICMPv4Header));
+            return NO_ERROR;
+        }
+        default:
+        {
+            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received!");
+            return APPLICATION_ERROR;
+        }
     }
-}
 
-int PacketCraft::Packet::PrintICMPv4Layer(ICMPv4Header* icmpv4Header)
-{
-
+    return Print(layerSize, protocol);
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!

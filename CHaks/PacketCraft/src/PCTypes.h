@@ -2,6 +2,7 @@
 #define PC_DEFINES_H
 
 #include <sys/types.h>
+#include <stdint.h>
 
 #define IPV4_ALEN 4
 #define IPV6_ALEN 16
@@ -31,9 +32,10 @@ struct sockaddr_in6;
 struct sockaddr_storage;
 struct sockaddr;
 
-struct ether_header;
-struct ip;
-struct icmphdr;
+struct EthHeader;
+struct ARPHeader;
+struct IPv4Header;
+struct ICMPv4Header;
 
 
 #endif

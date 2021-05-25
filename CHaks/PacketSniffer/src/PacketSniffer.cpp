@@ -123,11 +123,15 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
         return APPLICATION_ERROR;
     }
 
-    if(PrintPacket(packet) == APPLICATION_ERROR)
+    std::cout << "Packet received:\n";
+
+    if(packet.Print() == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
         return APPLICATION_ERROR;
     }
+
+    std::cout << std::endl;
 
     return NO_ERROR;
 }
