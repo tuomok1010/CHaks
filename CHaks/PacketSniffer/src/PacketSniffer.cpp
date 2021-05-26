@@ -1,5 +1,6 @@
 #include "PacketSniffer.h"
 
+#include <iostream>
 #include <unistd.h>
 #include <poll.h>
 #include <netinet/in.h>
@@ -105,11 +106,18 @@ bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol)
     if(PacketCraft::CompareStr(protocol, "ALL") == TRUE)
         return TRUE;
 
+    /*
     for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
     {
         if(PacketCraft::CompareStr(protocol, supportedProtocols[i]) == TRUE)
             return TRUE;
     }
+    */
+   for(std::pair<const char*, int> e : supportedProtocols)
+   {
+        if(PacketCraft::CompareStr(protocol, e.first) == TRUE)
+            return TRUE;
+   }
 
     return FALSE;
 }
@@ -121,6 +129,17 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
     {
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Receive() error!");
         return APPLICATION_ERROR;
+    }
+
+    bool32 isValid{FALSE};
+
+    for(int i = 0; i < packet.GetNLayers; ++i)
+    {
+        for(std::pair<const char*, int> e : supportedProtocols)
+        {
+            if(packet.GetLayerType(i) == e.second)
+                isValid = TRUE;
+        }
     }
 
     std::cout << "Packet received:\n";

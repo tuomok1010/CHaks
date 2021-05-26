@@ -1,6 +1,7 @@
 #include "PacketSniffer.h"
 
 #include <iostream>
+
 #include <unistd.h>
 #include <net/if.h>
 
@@ -12,14 +13,17 @@ void PrintHelp(char** argv)
         << "<interface name>: the interface you wish to monitor.\n"
         << "<protocols>: types of packets to monitor. Following protocols are supported:\n";
 
+    /*
     for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
     {
-        std::cout << PacketSniff::supportedProtocols[i] << " ";
+        std::cout << PacketSniff::supportedProtocols.at(i) << " ";
     }
+    */
 
-    std::cout
-        << "\nExample: " << argv[0] << " eth0 " << PacketSniff::supportedProtocols[1] << " " << PacketSniff::supportedProtocols[2]
-        << std::endl;
+   for(std::pair<const char*, int> e : PacketSniff::supportedProtocols)
+        std::cout << e.first << " ";
+
+    std::cout << "\nExample: " << argv[0] << " eth0 " << "ARP " << " " << "ICMPV4" << std::endl;
 }
 
 // TODO: make this more bulletproof
@@ -74,7 +78,6 @@ int ProcessArgs(int argc, char** argv, char* ifName, char protocols[N_PROTOCOLS_
 int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
-    char protocols[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
 
     if(ProcessArgs(argc, argv, interfaceName, protocols) == APPLICATION_ERROR)
     {
