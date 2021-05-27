@@ -13,13 +13,6 @@ void PrintHelp(char** argv)
         << "<interface name>: the interface you wish to monitor.\n"
         << "<protocols>: types of packets to monitor. Following protocols are supported:\n";
 
-    /*
-    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
-    {
-        std::cout << PacketSniff::supportedProtocols.at(i) << " ";
-    }
-    */
-
    for(std::pair<const char*, uint32_t> e : PacketSniff::supportedProtocols)
         std::cout << e.first << " ";
 
@@ -27,7 +20,7 @@ void PrintHelp(char** argv)
 }
 
 // TODO: make this more bulletproof
-int ProcessArgs(int argc, char** argv, char* ifName, PacketSniff::PacketSniffer packetSniffer)
+int ProcessArgs(int argc, char** argv, char* ifName, PacketSniff::PacketSniffer& packetSniffer)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -69,6 +62,19 @@ int main(int argc, char** argv)
         LOG_ERROR(APPLICATION_ERROR, "PacketSniff::PacketSniffer::Init() error!");
         return APPLICATION_ERROR;
     }
+
+    std::cout << "protocols: ";
+    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
+    {
+        std::cout << packetSniffer.protocolsSupplied[i] << " ";
+    }
+
+    std::cout << "\nsocket fds: ";
+    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
+    {
+        std::cout << packetSniffer.socketFds[i] << " ";
+    }
+    return NO_ERROR;
 
     if(packetSniffer.Sniff() == APPLICATION_ERROR)
     {

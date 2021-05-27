@@ -29,11 +29,12 @@ namespace PacketSniff
         static bool32 IsProtocolSupported(const char* protocol);
 
         char protocolsSupplied[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
+        int socketFds[N_PROTOCOLS_SUPPORTED];
 
         private:
         int ReceivePacket(const int socketFd);
+        void CloseSockets();
 
-        int socketFds[N_PROTOCOLS_SUPPORTED]{};
         int nSocketsUsed{};
     };
 }
