@@ -21,38 +21,73 @@ PacketSniff::PacketSniffer::~PacketSniffer()
     }
 }
 
-int PacketSniff::PacketSniffer::Init(char protocols[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE])
+int PacketSniff::PacketSniffer::Init()
 {
-    bool32 enableAllProtocols = PacketCraft::CompareStr(protocols[0], "ALL");
+    bool32 enableAllProtocols = PacketCraft::CompareStr(protocolsSupplied[0], "ALL");
     int socketIndex{0};
 
-    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
+    if(enableAllProtocols == TRUE)
     {
-        if(PacketCraft::CompareStr(protocols[i], "ARP") == TRUE || enableAllProtocols == TRUE)
+        if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL)) == -1))
         {
-            if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP)) == -1))
+            LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    for(int i = 1; i < N_PROTOCOLS_SUPPORTED; ++i)
+    {
+        if(PacketCraft::CompareStr(protocolsSupplied[i], ""))
+            break;
+
+        if(PacketSniff::PacketSniffer::IsProtocolSupported(protocolsSupplied[i]) == TRUE)
+        {
+            if(PacketCraft::CompareStr(protocolsSupplied[i], "ALL") == TRUE)
             {
-                LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+                LOG_ERROR(APPLICATION_ERROR, "error! ALL protocol cannot be used with other protocols!");
                 return APPLICATION_ERROR;
+            }
+
+            if(PacketCraft::CompareStr(protocolsSupplied[i], "ETHERNET") == TRUE)
+            {
+                if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL)) == -1))
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+                    return APPLICATION_ERROR;
+                }
+            }
+
+            if(PacketCraft::CompareStr(protocolsSupplied[i], "ARP") == TRUE)
+            {
+                if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP)) == -1))
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+                    return APPLICATION_ERROR;
+                }
+            }
+
+            if(PacketCraft::CompareStr(protocolsSupplied[i], "IPV4") == TRUE)
+            {
+                if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+                    return APPLICATION_ERROR;
+                }
+            }
+
+            if(PacketCraft::CompareStr(protocolsSupplied[i], "ICMPV4") == TRUE)
+            {
+                if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "socket() error!");
+                    return APPLICATION_ERROR;
+                }
             }
         }
-
-        if(PacketCraft::CompareStr(protocols[i], "IPV4") == TRUE || enableAllProtocols == TRUE)
+        else
         {
-            if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
-            {
-                LOG_ERROR(APPLICATION_ERROR, "socket() error!");
-                return APPLICATION_ERROR;
-            }
-        }
-
-        if(PacketCraft::CompareStr(protocols[i], "ICMPV4") == TRUE || enableAllProtocols == TRUE)
-        {
-            if((socketFds[socketIndex++] = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP)) == -1))
-            {
-                LOG_ERROR(APPLICATION_ERROR, "socket() error!");
-                return APPLICATION_ERROR;
-            }
+            LOG_ERROR(APPLICATION_ERROR, "unsupported protocol supplied!");
+            return APPLICATION_ERROR;
         }
     }
 
@@ -60,15 +95,23 @@ int PacketSniff::PacketSniffer::Init(char protocols[N_PROTOCOLS_SUPPORTED][PROTO
     return NO_ERROR;
 }
 
-int PacketSniff::PacketSniffer::ReceivePackets()
+int PacketSniff::PacketSniffer::Sniff()
 {
-    pollfd* pollFds = new pollfd[nSocketsUsed];
+    pollfd* pollFds = new pollfd[nSocketsUsed + 1];
+
+    // we want to monitor console input, entering something there stops the sniffer
+    pollFds[0].fd = 0;
+    pollFds[0].events = POLLIN;
 
     for(int i = 0; i < nSocketsUsed; ++i)
     {
-        pollFds[i].fd = socketFds[i];
-        pollFds[i].events = POLLIN;
+        pollFds[i + 1].fd = socketFds[i];
+        pollFds[i + 1].events = POLLIN;
     }
+
+    std::cout << "sniffing... press enter to stop\n" << std::endl;
+    // sleeping for 2 seconds to make sure user sees the message above
+    sleep(2);
 
     while(true)
     {
@@ -76,11 +119,13 @@ int PacketSniff::PacketSniffer::ReceivePackets()
 
         if(nEvents == -1)
         {
+            delete pollFds;
             LOG_ERROR(APPLICATION_ERROR, "poll() error!");
             return APPLICATION_ERROR;
         }
         else if(nEvents == 0)
         {
+            delete pollFds;
             LOG_ERROR(APPLICATION_ERROR, "poll() timeout!");
             return APPLICATION_ERROR;
         }
@@ -88,6 +133,12 @@ int PacketSniff::PacketSniffer::ReceivePackets()
         {
             for(int i = 0; i < nSocketsUsed; ++i)
             {
+                if((i == 0) && (pollFds[i].revents & POLLIN))
+                {
+                    delete pollFds;
+                    return NO_ERROR;
+                }
+
                 if(pollFds[i].revents & POLLIN)
                 {
                     if(ReceivePacket(pollFds[i].fd) == APPLICATION_ERROR)
@@ -98,7 +149,9 @@ int PacketSniff::PacketSniffer::ReceivePackets()
                 }
             }
         }
-    }    
+    }
+
+    return NO_ERROR;    
 }
 
 bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol)
@@ -106,13 +159,6 @@ bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol)
     if(PacketCraft::CompareStr(protocol, "ALL") == TRUE)
         return TRUE;
 
-    /*
-    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
-    {
-        if(PacketCraft::CompareStr(protocol, supportedProtocols[i]) == TRUE)
-            return TRUE;
-    }
-    */
    for(std::pair<const char*, int> e : supportedProtocols)
    {
         if(PacketCraft::CompareStr(protocol, e.first) == TRUE)
@@ -133,24 +179,27 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
 
     bool32 isValid{FALSE};
 
-    for(int i = 0; i < packet.GetNLayers; ++i)
+    for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
     {
-        for(std::pair<const char*, int> e : supportedProtocols)
+        for(std::pair<const char*, uint32_t> e : supportedProtocols)
         {
             if(packet.GetLayerType(i) == e.second)
                 isValid = TRUE;
         }
     }
 
-    std::cout << "Packet received:\n";
-
-    if(packet.Print() == APPLICATION_ERROR)
+    if(isValid == TRUE)
     {
-        LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
-        return APPLICATION_ERROR;
-    }
+        std::cout << "Packet received:\n";
 
-    std::cout << std::endl;
+        if(packet.Print() == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
+            return APPLICATION_ERROR;
+        }
+
+        std::cout << std::endl;
+    }
 
     return NO_ERROR;
 }

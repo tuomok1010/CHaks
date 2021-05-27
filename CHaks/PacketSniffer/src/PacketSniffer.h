@@ -2,7 +2,6 @@
 #define PACKET_SNIFFER_H
 
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
-#include <stdarg.h>
 #include <unordered_map>
 
 #define N_PROTOCOLS_SUPPORTED   3
@@ -10,7 +9,7 @@
 
 namespace PacketSniff
 {
-    const static std::unordered_map<const char*, unsigned int> supportedProtocols
+    const static std::unordered_map<const char*, uint32_t> supportedProtocols
     {
         {"ETHERNET", PC_ETHER_II},
         {"ARP", PC_ARP},
@@ -24,15 +23,16 @@ namespace PacketSniff
         PacketSniffer();
         ~PacketSniffer();
 
-        int Init(...);
-        int ReceivePackets();
+        int Init();
+        int Sniff();
 
         static bool32 IsProtocolSupported(const char* protocol);
+
+        char protocolsSupplied[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
 
         private:
         int ReceivePacket(const int socketFd);
 
-        const char* protocolsSupplied[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
         int socketFds[N_PROTOCOLS_SUPPORTED]{};
         int nSocketsUsed{};
     };
