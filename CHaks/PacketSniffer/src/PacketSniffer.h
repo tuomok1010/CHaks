@@ -23,19 +23,17 @@ namespace PacketSniff
         PacketSniffer();
         ~PacketSniffer();
 
-        int Init();
+        int Init(const char* interfaceName);
         int Sniff();
 
         static bool32 IsProtocolSupported(const char* protocol);
 
         char protocolsSupplied[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
-        int socketFds[N_PROTOCOLS_SUPPORTED];
+        int socketFd;
 
         private:
         int ReceivePacket(const int socketFd);
-        void CloseSockets();
-
-        int nSocketsUsed{};
+        void CloseSocket();
     };
 }
 

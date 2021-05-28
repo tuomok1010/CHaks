@@ -37,9 +37,9 @@ int ProcessArgs(int argc, char** argv, char* ifName, PacketSniff::PacketSniffer&
 
     PacketCraft::CopyStr(ifName, IFNAMSIZ, argv[1]);
 
-    for(int i = 2; i < argc; ++i)
+    for(int i = 2, j = 0; i < argc; ++i, ++j)
     {
-        PacketCraft::CopyStr(packetSniffer.protocolsSupplied[i], PROTOCOL_NAME_SIZE, argv[i]);
+        PacketCraft::CopyStr(packetSniffer.protocolsSupplied[j], PROTOCOL_NAME_SIZE, argv[i]);
     }
 
     return NO_ERROR;
@@ -57,12 +57,12 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    if(packetSniffer.Init() == APPLICATION_ERROR)
+    if(packetSniffer.Init(interfaceName) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "PacketSniff::PacketSniffer::Init() error!");
         return APPLICATION_ERROR;
     }
-
+/*
     std::cout << "protocols: ";
     for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
     {
@@ -75,6 +75,7 @@ int main(int argc, char** argv)
         std::cout << packetSniffer.socketFds[i] << " ";
     }
     return NO_ERROR;
+*/
 
     if(packetSniffer.Sniff() == APPLICATION_ERROR)
     {
