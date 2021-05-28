@@ -606,13 +606,13 @@ int PacketCraft::PrintEthernetLayer(EthHeader* ethHeader)
 
     if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
@@ -635,25 +635,25 @@ int PacketCraft::PrintARPLayer(ARPHeader* arpHeader)
 
     if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 
     if(inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)arpHeader->ar_sha, ar_sha) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 
     if(ether_ntoa_r((ether_addr*)arpHeader->ar_tha, ar_tha) == nullptr)
     {
-        // LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
         return APPLICATION_ERROR;
     }
 

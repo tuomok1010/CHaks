@@ -116,8 +116,10 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
 
     for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
     {
+        std::cout << "layer type: " << packet.GetLayerType(i) << "\n";
+
         bool32 supportedLayerFound{FALSE};
-        for(std::pair<const char*, uint32_t> e : supportedProtocols)
+        for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
         {
             if(packet.GetLayerType(i) == e.second)
                 supportedLayerFound = TRUE;
@@ -129,7 +131,7 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
             break;
         }
     }
-
+/*
     if(isValid == TRUE)
     {
         std::cout << "Packet received:\n";
@@ -142,7 +144,7 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
 
         std::cout << std::endl;
     }
-
+*/
     return NO_ERROR;
 }
 
