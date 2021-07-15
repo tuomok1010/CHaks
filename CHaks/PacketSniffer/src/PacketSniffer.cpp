@@ -32,6 +32,20 @@ int PacketSniff::PacketSniffer::Init(const char* interfaceName)
         return APPLICATION_ERROR;
     }
 
+    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
+    {
+        if(PacketCraft::CompareStr(protocolsSupplied[i], "") == TRUE)
+            continue;
+
+        // std::cout << "verifying following protocol: " << protocolsSupplied[i] << "\n";
+
+        if(IsProtocolSupported(protocolsSupplied[i]) == FALSE)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "unsupported protocol supplied!");
+            return APPLICATION_ERROR;
+        }
+    }
+
     return NO_ERROR;
 }
 
@@ -89,16 +103,24 @@ int PacketSniff::PacketSniffer::Sniff()
     return NO_ERROR;    
 }
 
-bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol)
+bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol) const
 {
-    if(PacketCraft::CompareStr(protocol, "ALL") == TRUE)
-        return TRUE;
-
-   for(std::pair<const char*, int> e : supportedProtocols)
-   {
+    for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
+    {
         if(PacketCraft::CompareStr(protocol, e.first) == TRUE)
             return TRUE;
-   }
+    }
+
+    return FALSE;
+}
+
+bool32 PacketSniff::PacketSniffer::IsProtocolSupported(uint32_t protocol) const
+{
+    for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
+    {
+        if(protocol == e.second)
+            return TRUE;
+    }
 
     return FALSE;
 }
@@ -112,26 +134,25 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
         return APPLICATION_ERROR;
     }
 
-    bool32 isValid{TRUE};
+    bool32 isValid{FALSE};
 
     for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
     {
-        std::cout << "layer type: " << packet.GetLayerType(i) << "\n";
-
-        bool32 supportedLayerFound{FALSE};
-        for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
+        PacketCraft::PrintLayerTypeStr(packet.GetLayerType(i), "layer type: ", "\n");
+        
+        for(unsigned int j = 0; j < N_PROTOCOLS_SUPPORTED; ++j)
         {
-            if(packet.GetLayerType(i) == e.second)
-                supportedLayerFound = TRUE;
-        }
-
-        if(supportedLayerFound == FALSE)
-        {
-            isValid = FALSE;
-            break;
+            if(PacketCraft::CompareStr(protocolsSupplied[j], "") == TRUE)
+                break;
+            
+            const char* packetProtocolStr = PacketCraft::ProtoUint32ToStr(packet.GetLayerType(i));
+            if(PacketCraft::CompareStr(packetProtocolStr, protocolsSupplied[j]) == TRUE)
+            {
+                isValid = TRUE;
+            }
         }
     }
-/*
+
     if(isValid == TRUE)
     {
         std::cout << "Packet received:\n";
@@ -144,7 +165,7 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
 
         std::cout << std::endl;
     }
-*/
+
     return NO_ERROR;
 }
 

@@ -8,11 +8,13 @@
 #define IPV6_ALEN 16
 
 // PacketCraft::Packet layer types
+// NOTE: if you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
 #define PC_NONE             0x0000
 #define PC_ETHER_II         0x0001
 #define PC_ARP              0x0002
 #define PC_IPV4             0x0003
 #define PC_ICMPV4           0x0004
+
 
 #define PC_MAX_LAYERS       100
 

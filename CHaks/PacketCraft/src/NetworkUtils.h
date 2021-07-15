@@ -1,10 +1,23 @@
 #ifndef NETWORK_UTILS_H
 #define NETWORK_UTILS_H
 
+#include <unordered_map>
+
 #include "PCTypes.h"
 
 namespace PacketCraft
 {
+    const static std::unordered_map<uint32_t, const char*> networkProtocols
+    {
+        {PC_ETHER_II, "ETHERNET"},
+        {PC_ARP, "ARP"},
+        {PC_IPV4, "IPV4"},
+        {PC_ICMPV4, "ICMPV4"}
+    };
+
+    const char* ProtoUint32ToStr(uint32_t protocol);
+    uint32_t ProtoStrToUint32(const char* protocol);
+
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);
     int GetMACAddr(char* ethAddrStr, const char* interfaceName, const int socketFd);
@@ -55,6 +68,8 @@ namespace PacketCraft
     int PrintARPLayer(ARPHeader* arpHeader);
     int PrintIPv4Layer(IPv4Header* ipv4Header);
     int PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize = 0);
+
+    void PrintLayerTypeStr(const uint32_t layerType, const char* prefix = "", const char* suffix = "");
 }
 
 #endif

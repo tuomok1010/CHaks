@@ -13,6 +13,22 @@
 #include <arpa/inet.h>          // inet_pton() / inet_ntop()  
 #include <netinet/ip.h>
 
+const char* PacketCraft::ProtoUint32ToStr(uint32_t protocol)
+{
+    return networkProtocols.at(protocol);
+}
+
+uint32_t PacketCraft::ProtoStrToUint32(const char* protocol)
+{
+    for(const std::pair<uint32_t, const char*>& e : networkProtocols)
+    {
+        if(CompareStr(e.second, protocol) == TRUE)
+            return e.first;
+    }
+
+    return PC_NONE;
+}
+
 int PacketCraft::GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd)
 {
     ifreq ifr{};
@@ -710,10 +726,12 @@ int PacketCraft::PrintIPv4Layer(IPv4Header* ipv4Header)
         << "time to live: "   << (uint16_t)ipv4Header->ip_ttl << "\n"
         << "protocol: "       << (uint16_t)ipv4Header->ip_p << "\n"
         << "checksum: "       << ntohs(ipv4Header->ip_sum) << "(" << ipv4ChecksumVerified << ")" << "\n"
-        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr << "\n";
+        << "source: "         << srcIPStr << " " << "destination: " << dstIPStr;
 
     if(hasIpv4Options == TRUE)
     {
+        std::cout << "\n";
+
         int newLineAt = 7;
         for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
         {
@@ -721,8 +739,9 @@ int PacketCraft::PrintIPv4Layer(IPv4Header* ipv4Header)
             if(i % newLineAt == 0)
                 std::cout << "\n";
         }
-        std::cout << std::dec << " . . . . . . . . . . " << std::endl;
     }
+
+    std::cout << std::dec << "\n . . . . . . . . . . " << std::endl;
 
     return NO_ERROR;
 }
@@ -740,15 +759,21 @@ int PacketCraft::PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize)
 
     if(dataSize > 0)
     {
-        int newLineAt = 7;
+        int newLineAt = 15;
         for(unsigned int i = 0; i < dataSize; ++i)
         {
-            std::cout << std::hex << icmpv4Header->data[i];
+            std::cout << (char)icmpv4Header->data[i];
             if(i % newLineAt == 0)
                 std::cout << "\n";
         }
-        std::cout << std::dec << " . . . . . . . . . . " << std::endl;
     }
 
+    std::cout << std::dec << "\n . . . . . . . . . . " << std::endl;
+
     return NO_ERROR;
+}
+
+void PacketCraft::PrintLayerTypeStr(const uint32_t layerType, const char* prefix, const char* suffix)
+{
+    std::cout << prefix << networkProtocols.at(layerType) << suffix << std::flush;
 }

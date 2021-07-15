@@ -62,20 +62,6 @@ int main(int argc, char** argv)
         LOG_ERROR(APPLICATION_ERROR, "PacketSniff::PacketSniffer::Init() error!");
         return APPLICATION_ERROR;
     }
-/*
-    std::cout << "protocols: ";
-    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
-    {
-        std::cout << packetSniffer.protocolsSupplied[i] << " ";
-    }
-
-    std::cout << "\nsocket fds: ";
-    for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
-    {
-        std::cout << packetSniffer.socketFds[i] << " ";
-    }
-    return NO_ERROR;
-*/
 
     if(packetSniffer.Sniff() == APPLICATION_ERROR)
     {

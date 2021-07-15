@@ -112,7 +112,7 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
 
 int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTimeoutMS)
 {
-    uint8_t packet[IP_MAXPACKET]{};
+    uint8_t packet[IP_MAXPACKET]{}; // TODO: don't do this on the stack!
     sockaddr fromInfo{};
     socklen_t fromInfoLen{sizeof(fromInfo)};
 

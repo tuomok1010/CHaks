@@ -4,7 +4,7 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 #include <unordered_map>
 
-#define N_PROTOCOLS_SUPPORTED   3
+#define N_PROTOCOLS_SUPPORTED   4
 #define PROTOCOL_NAME_SIZE      10
 
 namespace PacketSniff
@@ -26,7 +26,9 @@ namespace PacketSniff
         int Init(const char* interfaceName);
         int Sniff();
 
-        static bool32 IsProtocolSupported(const char* protocol);
+        bool32 IsProtocolSupported(const char* protocol) const;
+        bool32 IsProtocolSupported(uint32_t protocol) const;
+
 
         char protocolsSupplied[N_PROTOCOLS_SUPPORTED][PROTOCOL_NAME_SIZE]{};
         int socketFd;
