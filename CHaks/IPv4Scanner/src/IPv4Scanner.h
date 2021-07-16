@@ -3,7 +3,7 @@
 
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 
-namespace IPv4Scan
+namespace CHaks
 {
     class IPv4Scanner
     {

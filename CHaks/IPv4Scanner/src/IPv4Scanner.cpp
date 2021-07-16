@@ -8,17 +8,17 @@
 #include <poll.h>
 #include <cstring>
 
-IPv4Scan::IPv4Scanner::IPv4Scanner()
+CHaks::IPv4Scanner::IPv4Scanner()
 {
 
 }
 
-IPv4Scan::IPv4Scanner::~IPv4Scanner()
+CHaks::IPv4Scanner::~IPv4Scanner()
 {
     
 }
 
-int IPv4Scan::IPv4Scanner::SendARPPackets(const char* interfaceName, const int socketFd, const sockaddr_in& srcIP, const ether_addr& srcMAC,
+int CHaks::IPv4Scanner::SendARPPackets(const char* interfaceName, const int socketFd, const sockaddr_in& srcIP, const ether_addr& srcMAC,
     const sockaddr_in& networkAddr, const sockaddr_in& broadcastAddr, bool32& running)
 {
     uint32_t networkHostByteOrder = ntohl(networkAddr.sin_addr.s_addr);
@@ -57,7 +57,7 @@ int IPv4Scan::IPv4Scanner::SendARPPackets(const char* interfaceName, const int s
     return NO_ERROR;
 }
 
-int IPv4Scan::IPv4Scanner::ReceiveARPPackets(const char* interfaceName, const int socketFd, bool32& running)
+int CHaks::IPv4Scanner::ReceiveARPPackets(const char* interfaceName, const int socketFd, bool32& running)
 {
     pollfd pollFds[2]{};
     pollFds[0].fd = 0;      
@@ -97,7 +97,7 @@ int IPv4Scan::IPv4Scanner::ReceiveARPPackets(const char* interfaceName, const in
     return NO_ERROR;
 }
 
-int IPv4Scan::IPv4Scanner::ProcessReceivedPacket(const char* interfaceName, const int socketFd, bool32 printHeader)
+int CHaks::IPv4Scanner::ProcessReceivedPacket(const char* interfaceName, const int socketFd, bool32 printHeader)
 {
     PacketCraft::ARPPacket arpPacket{};
     if(arpPacket.Receive(socketFd, 0) == NO_ERROR)
@@ -130,7 +130,7 @@ int IPv4Scan::IPv4Scanner::ProcessReceivedPacket(const char* interfaceName, cons
     return NO_ERROR;
 }
 
-int IPv4Scan::IPv4Scanner::PrintResult(const ether_addr& macAddr, const sockaddr_in& ipAddr, bool32 printHeader)
+int CHaks::IPv4Scanner::PrintResult(const ether_addr& macAddr, const sockaddr_in& ipAddr, bool32 printHeader)
 {
     char macStr[ETH_ADDR_STR_LEN]{};
     char ipStr[INET_ADDRSTRLEN]{};

@@ -94,7 +94,7 @@ int main(int argc, char** argv)
     // NOTE: this was originally planned to be used in a multithreaded program. Right now it does nothing.
     bool32 running{TRUE};
 
-    IPv4Scan::IPv4Scanner scanner{};
+    CHaks::IPv4Scanner scanner{};
 
     scanner.SendARPPackets(ifName, socketFd, myIP, myMAC, networkAddr, broadcastAddr, running);
 
