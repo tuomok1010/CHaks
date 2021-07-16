@@ -8,17 +8,17 @@
 #include <arpa/inet.h> 
 #include <sys/ioctl.h> 
 
-ARPSpoof::ARPSpoofer::ARPSpoofer()
+CHaks::ARPSpoofer::ARPSpoofer()
 {
 
 }
 
-ARPSpoof::ARPSpoofer::~ARPSpoofer()
+CHaks::ARPSpoofer::~ARPSpoofer()
 {
 
 }
 
-int ARPSpoof::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* interfaceName, const char* srcIPStr, const char* srcMACStr, 
+int CHaks::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* interfaceName, const char* srcIPStr, const char* srcMACStr, 
     const char* targetIPStr, char* targetMACStr)
 {
     while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, targetIPStr, targetMACStr) == APPLICATION_ERROR)
@@ -60,7 +60,7 @@ int ARPSpoof::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* inter
     return NO_ERROR;
 }
 
-int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+int CHaks::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
     const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
 {
     PacketCraft::ARPPacket arpPacket;
@@ -101,7 +101,7 @@ int ARPSpoof::ARPSpoofer::Spoof(const int socketFd, const char* interfaceName, c
     return NO_ERROR;
 }
 
-int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+int CHaks::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
     const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
 {
     pollfd pollFds[1]{};
@@ -139,7 +139,7 @@ int ARPSpoof::ARPSpoofer::SpoofLoop(const int socketFd, const char* interfaceNam
     return NO_ERROR;
 }
 
-int ARPSpoof::ARPSpoofer::RestoreTargets(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
+int CHaks::ARPSpoofer::RestoreTargets(const int socketFd, const char* interfaceName, const char* yourIP, const char* yourMAC, 
     const char* target1IPStr, const char* target1MACStr, const char* target2IPStr, const char* target2MACStr, const bool32 spoofBoth)
 {
     PacketCraft::ARPPacket arpPacket;

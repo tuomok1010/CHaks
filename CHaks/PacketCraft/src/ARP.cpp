@@ -223,6 +223,6 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t laye
         }
     }
 
-    return ProcessReceivedPacket(packet, protocol);
+    return ProcessReceivedPacket(packet, 0, protocol);
 
 }

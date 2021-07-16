@@ -98,7 +98,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    ARPSpoof::ARPSpoofer arpSpoofer;
+    CHaks::ARPSpoofer arpSpoofer;
 
     if(arpSpoofer.GetTargetMACAddr(socketFd, interfaceName, myIPStr, myMACStr, target1IPStr, target1MACStr) == APPLICATION_ERROR)
     {

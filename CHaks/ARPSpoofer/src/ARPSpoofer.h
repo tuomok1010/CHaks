@@ -6,7 +6,7 @@
 #define ARP_SPOOF_FREQUENCY_MS  2'000
 #define ARP_REQ_TIMEOUT_MS      5'000
 
-namespace ARPSpoof
+namespace CHaks
 {
     class ARPSpoofer
     {
