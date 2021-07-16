@@ -5,18 +5,18 @@
 #include <poll.h>
 #include <netinet/in.h>
 
-PacketSniff::PacketSniffer::PacketSniffer() :
+CHaks::PacketSniffer::PacketSniffer() :
     socketFd(-1)
 {
 
 }
 
-PacketSniff::PacketSniffer::~PacketSniffer()
+CHaks::PacketSniffer::~PacketSniffer()
 {
     CloseSocket();
 }
 
-int PacketSniff::PacketSniffer::Init(const char* interfaceName)
+int CHaks::PacketSniffer::Init(const char* interfaceName)
 {
     CloseSocket();
 
@@ -49,7 +49,7 @@ int PacketSniff::PacketSniffer::Init(const char* interfaceName)
     return NO_ERROR;
 }
 
-int PacketSniff::PacketSniffer::Sniff()
+int CHaks::PacketSniffer::Sniff()
 {
     pollfd pollFds[2]{};
 
@@ -103,7 +103,7 @@ int PacketSniff::PacketSniffer::Sniff()
     return NO_ERROR;    
 }
 
-bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol) const
+bool32 CHaks::PacketSniffer::IsProtocolSupported(const char* protocol) const
 {
     for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
     {
@@ -114,7 +114,7 @@ bool32 PacketSniff::PacketSniffer::IsProtocolSupported(const char* protocol) con
     return FALSE;
 }
 
-bool32 PacketSniff::PacketSniffer::IsProtocolSupported(uint32_t protocol) const
+bool32 CHaks::PacketSniffer::IsProtocolSupported(uint32_t protocol) const
 {
     for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
     {
@@ -125,7 +125,7 @@ bool32 PacketSniff::PacketSniffer::IsProtocolSupported(uint32_t protocol) const
     return FALSE;
 }
 
-int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
+int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
 {
     PacketCraft::Packet packet;
     if(packet.Receive(socketFd, 0, 0) == APPLICATION_ERROR)
@@ -137,9 +137,7 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
     bool32 isValid{FALSE};
 
     for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
-    {
-        PacketCraft::PrintLayerTypeStr(packet.GetLayerType(i), "layer type: ", "\n");
-        
+    {       
         for(unsigned int j = 0; j < N_PROTOCOLS_SUPPORTED; ++j)
         {
             if(PacketCraft::CompareStr(protocolsSupplied[j], "") == TRUE)
@@ -169,7 +167,7 @@ int PacketSniff::PacketSniffer::ReceivePacket(const int socketFd)
     return NO_ERROR;
 }
 
-void PacketSniff::PacketSniffer::CloseSocket()
+void CHaks::PacketSniffer::CloseSocket()
 {
     close(socketFd);
     socketFd = -1;

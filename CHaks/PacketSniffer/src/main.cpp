@@ -13,14 +13,14 @@ void PrintHelp(char** argv)
         << "<interface name>: the interface you wish to monitor.\n"
         << "<protocols>: types of packets to monitor. Following protocols are supported:\n";
 
-   for(std::pair<const char*, uint32_t> e : PacketSniff::supportedProtocols)
+   for(std::pair<const char*, uint32_t> e : CHaks::supportedProtocols)
         std::cout << e.first << " ";
 
     std::cout << "\nExample: " << argv[0] << " eth0 " << "ARP " << "ICMPV4" << std::endl;
 }
 
 // TODO: make this more bulletproof
-int ProcessArgs(int argc, char** argv, char* ifName, PacketSniff::PacketSniffer& packetSniffer)
+int ProcessArgs(int argc, char** argv, char* ifName, CHaks::PacketSniffer& packetSniffer)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -48,7 +48,7 @@ int ProcessArgs(int argc, char** argv, char* ifName, PacketSniff::PacketSniffer&
 int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
-    PacketSniff::PacketSniffer packetSniffer;
+    CHaks::PacketSniffer packetSniffer;
 
     if(ProcessArgs(argc, argv, interfaceName, packetSniffer) == APPLICATION_ERROR)
     {
@@ -59,13 +59,13 @@ int main(int argc, char** argv)
 
     if(packetSniffer.Init(interfaceName) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "PacketSniff::PacketSniffer::Init() error!");
+        LOG_ERROR(APPLICATION_ERROR, "CHaks::PacketSniffer::Init() error!");
         return APPLICATION_ERROR;
     }
 
     if(packetSniffer.Sniff() == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "PacketSniff::PacketSniffer::Sniff() error!");
+        LOG_ERROR(APPLICATION_ERROR, "CHaks::PacketSniffer::Sniff() error!");
         return APPLICATION_ERROR;
     }
 

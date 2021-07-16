@@ -186,41 +186,39 @@ void PacketCraft::Packet::ResetPacketBuffer()
     }
 }
 
-int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol)
+int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint32_t layerToPrintIndex)
 {
-    static uint32_t layerIndex = 0;
-
     switch(protocol)
     {
         case 0:
         {
-            EthHeader* ethHeader = (EthHeader*)GetLayerStart(layerIndex);
+            EthHeader* ethHeader = (EthHeader*)GetLayerStart(layerToPrintIndex);
             protocol = ntohs(ethHeader->ether_type);
             PrintEthernetLayer(ethHeader);
-            ++layerIndex;
+            ++layerToPrintIndex;
             break;
         }
         case ETH_P_ARP:
         {
-            ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(layerIndex);
+            ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(layerToPrintIndex);
             PrintARPLayer(arpHeader);
             return NO_ERROR;
         }
         case ETH_P_IP:
         {
-            IPv4Header* ipHeader = (IPv4Header*)GetLayerStart(layerIndex);
+            IPv4Header* ipHeader = (IPv4Header*)GetLayerStart(layerToPrintIndex);
             protocol = ipHeader->ip_p;
 
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
 
             PrintIPv4Layer(ipHeader);
-            ++layerIndex;
+            ++layerToPrintIndex;
             break;
         }
         case IPPROTO_ICMP:
         {
-            ICMPv4Header* icmpvHeader = (ICMPv4Header*)GetLayerStart(layerIndex);
+            ICMPv4Header* icmpvHeader = (ICMPv4Header*)GetLayerStart(layerToPrintIndex);
             PrintICMPv4Layer(icmpvHeader, layerSize - sizeof(ICMPv4Header));
             return NO_ERROR;
         }
@@ -231,7 +229,7 @@ int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol)
         }
     }
 
-    return Print(layerSize, protocol);
+    return Print(layerSize, protocol, layerToPrintIndex);
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!

@@ -7,7 +7,7 @@
 #define N_PROTOCOLS_SUPPORTED   4
 #define PROTOCOL_NAME_SIZE      10
 
-namespace PacketSniff
+namespace CHaks
 {
     const static std::unordered_map<const char*, uint32_t> supportedProtocols
     {
