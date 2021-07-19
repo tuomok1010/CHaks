@@ -5,6 +5,8 @@
 #include <net/if.h>
 #include <unistd.h>
 
+// IPv4PingPacket test
+
 void PrintHelp(char** argv)
 {
     std::cout
@@ -40,7 +42,6 @@ int ProcessArgs(int argc, char** argv, char* ifName)
     return NO_ERROR;
 }
 
-// TODO: make an option to use a different protocol than ARP to do the scan. ARP spams a lot of broadcasts into the network.
 int main(int argc, char** argv)
 {
     char ifName[IFNAMSIZ]{};
@@ -51,15 +52,15 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IPV6));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
         return APPLICATION_ERROR;
     }
 
-    char myIP[INET_ADDRSTRLEN]{};
-    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET) == APPLICATION_ERROR)
+    char myIP[INET6_ADDRSTRLEN]{};
+    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET6) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
@@ -74,36 +75,23 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    const char* dstIP = "10.0.2.1";
-    const char* dstMAC = "52:54:00:12:35:00";
+    //const char* dstIP = "::1";
+    //const char* dstMAC = "00:00:00:00:00:00";
 
-    PacketCraft::IPv4PingPacket pingPacket;
-    if(pingPacket.Create(myMAC, dstMAC, myIP, dstIP, PingType::ECHO_REQUEST) == APPLICATION_ERROR)
+    PacketCraft::Packet ping6Packet;
+
+    if(ping6Packet.Receive(socketFd, 0) == APPLICATION_ERROR)
     {
         close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Create() error!");
+        LOG_ERROR(APPLICATION_ERROR, "ping6Packet.Receive() error!");
         return APPLICATION_ERROR;
     }
 
-    std::cout << "sending the following packet: \n";
-    pingPacket.PrintPacketData();
+    IPv6Header test;
+    ICMPv6Header test2;
+    
 
-    if(pingPacket.Send(socketFd, ifName) == APPLICATION_ERROR)
-    {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Send() error!");
-        return APPLICATION_ERROR;
-    }
-
-    if(pingPacket.Receive(socketFd, 0) == APPLICATION_ERROR)
-    {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::IPv4PingPacket::Receive() error!");
-        return APPLICATION_ERROR;
-    }
-
-    std::cout << "received ping packet: \n";
-    pingPacket.PrintPacketData();
+    ping6Packet.Print();
 
     close(socketFd);
 

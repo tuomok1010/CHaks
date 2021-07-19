@@ -56,7 +56,7 @@ int PacketCraft::IPv4PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     icmpv4Header->un.echo.id = 0;
     icmpv4Header->un.echo.sequence = 0;
     icmpv4Header->checksum = 0;
-    icmpv4Header->checksum = CalculateIPv4Checksum(icmpv4Header, sizeof(*icmpv4Header));
+    icmpv4Header->checksum = CalculateICMPv4Checksum(icmpv4Header, sizeof(*icmpv4Header));
 
     return NO_ERROR;
 }
@@ -157,7 +157,7 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
 
     uint32_t icmpvHeaderSizeInBytes = htons(ipv4Header->ip_len) - ETH_HLEN - ipv4Header->ip_hl;
     const char* ipv4ChecksumVerified = VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
-    const char* icmpv4ChecksumVerified = VerifyIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes) == TRUE ? "verified" : "unverified";
+    const char* icmpv4ChecksumVerified = VerifyICMPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes) == TRUE ? "verified" : "unverified";
     bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
     bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
 

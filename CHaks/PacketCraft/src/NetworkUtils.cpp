@@ -529,6 +529,11 @@ uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderS
     return ~(uint16_t)sum;
 }
 
+uint16_t PacketCraft::CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes)
+{
+    return CalculateIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes);
+}
+
 bool32 PacketCraft::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes)
 {
     uint16_t* header16 = (uint16_t*)ipv4Header;
@@ -549,6 +554,11 @@ bool32 PacketCraft::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeIn
         return TRUE;
     else
         return FALSE;
+}
+
+bool32 PacketCraft::VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes)
+{
+    return VerifyIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes);
 }
 
 int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
@@ -746,6 +756,44 @@ int PacketCraft::PrintIPv4Layer(IPv4Header* ipv4Header)
     return NO_ERROR;
 }
 
+int PacketCraft::PrintIPv6Layer(IPv6Header* ipv6Header)
+{
+    char srcIPStr[INET6_ADDRSTRLEN]{};
+    char dstIPStr[INET6_ADDRSTRLEN]{};
+
+    if(inet_ntop(AF_INET6, &ipv6Header->ip6_src, srcIPStr, INET6_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, dstIPStr, INET6_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    uint32_t version =      ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0xf0000000) >> 28);
+    uint32_t trafficClass = ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x0ff00000) >> 20);   // NOTE: not tested
+    uint32_t dscp =         ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x0fc00000) >> 22);   // NOTE: not tested
+    uint32_t ecn =          ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x00300000) >> 20);   // NOTE: not tested
+    uint32_t flowLabel =    ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x000fffff;
+
+    std::cout
+        << "[IPv6]:\n"
+        << "version: "          << version  << "\n"
+        << "traffic class: "    << std::hex << "0x" << trafficClass << std::dec << "(dscp: " << dscp << " ecn: " << ecn << ")" << "\n"
+        << "flow label: "       << std::hex << "0x" << flowLabel    << std::dec << "\n"
+        << "payload length: "   << ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen) << "\n"
+        << "next header: "      << (uint16_t)ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt << "\n"
+        << "hop limit: "        << (uint16_t)ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim << "\n"
+        << "source: "           << srcIPStr << " " << "destination: " << dstIPStr;
+
+    std::cout << std::dec << "\n . . . . . . . . . . " << std::endl;
+
+    return NO_ERROR;
+}
+
 int PacketCraft::PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize)
 {
     const char* icmpv4ChecksumVerified = VerifyIPv4Checksum(icmpv4Header, sizeof(ICMPv4Header) + dataSize) == TRUE ? "verified" : "unverified";
@@ -757,18 +805,40 @@ int PacketCraft::PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize)
         << "checksum: "       << ntohs(icmpv4Header->checksum) << "(" << icmpv4ChecksumVerified << ")" << "\n"
         << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence) << "\n";
 
-    if(dataSize > 0)
+    int newLineAt = 15;
+    unsigned char* dataPtr = (unsigned char*)icmpv4Header->data;
+
+    for(unsigned int i = 0; i < dataSize; ++i)
     {
-        int newLineAt = 15;
-        for(unsigned int i = 0; i < dataSize; ++i)
+        std::cout << *dataPtr++;
+        if(i % newLineAt == 0)
         {
-            std::cout << (char)icmpv4Header->data[i];
-            if(i % newLineAt == 0)
-                std::cout << "\n";
+            std::cout << "\n";
         }
     }
 
-    std::cout << std::dec << "\n . . . . . . . . . . " << std::endl;
+    return NO_ERROR;
+}
+
+int PacketCraft::PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize)
+{
+    std::cout
+        << "[ICMPv6]:\n"
+        << "type: "     << (uint16_t)icmpv6Header->icmp6_type << "\n"
+        << "code: "     << (uint16_t)icmpv6Header->icmp6_code << "\n"
+        << "checksum: " << ntohs(icmpv6Header->icmp6_cksum) << "\n";
+
+    int newLineAt = 15;
+    unsigned char* dataPtr = (unsigned char*)icmpv6Header->data;
+
+    for(unsigned int i = 0; i < dataSize; ++i)
+    {
+        std::cout << *dataPtr++;
+        if(i % newLineAt == 0)
+        {
+            std::cout << "\n";
+        }
+    }
 
     return NO_ERROR;
 }

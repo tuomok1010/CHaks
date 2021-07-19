@@ -216,10 +216,28 @@ int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint
             ++layerToPrintIndex;
             break;
         }
+        case ETH_P_IPV6: // TODO: TEST!!!
+        {
+            IPv6Header* ipv6Header = (IPv6Header*)GetLayerStart(layerToPrintIndex);
+            protocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+            if(protocol == IPPROTO_ICMPV6)
+                layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
+
+            PrintIPv6Layer(ipv6Header);
+            ++layerToPrintIndex;
+            break;
+        }
         case IPPROTO_ICMP:
         {
             ICMPv4Header* icmpvHeader = (ICMPv4Header*)GetLayerStart(layerToPrintIndex);
             PrintICMPv4Layer(icmpvHeader, layerSize - sizeof(ICMPv4Header));
+            return NO_ERROR;
+        }
+        case IPPROTO_ICMPV6:
+        {
+            ICMPv6Header* icmpv6Header = (ICMPv6Header*)GetLayerStart(layerToPrintIndex);
+            PrintICMPv6Layer(icmpv6Header, layerSize - sizeof(ICMPv6Header));
             return NO_ERROR;
         }
         default:
@@ -269,12 +287,37 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
+        case ETH_P_IPV6: // TODO: TEST!!!
+        {
+            IPv6Header* ipv6Header = (IPv6Header*)packet;
+            AddLayer(PC_IPV6, sizeof(IPv6Header));
+            memcpy(GetLayerStart(nLayers - 1), packet, sizeof(IPv6Header));
+            protocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+            if(protocol == IPPROTO_ICMPV6)
+                layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
+
+            packet += sizeof(IPv6Header);
+            break;
+        }
         case IPPROTO_ICMP:
         {
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
 
             if(layerSize > sizeof(ICMPv4Header))
+            {
+                // checks if there is a data field present. TODO: do we need to do anything?
+            }
+
+            return NO_ERROR;
+        }
+        case IPPROTO_ICMPV6: // TODO: TEST!!!
+        {
+            AddLayer(PC_ICMPV6, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+
+            if(layerSize > sizeof(ICMPv6Header))
             {
                 // checks if there is a data field present. TODO: do we need to do anything?
             }
