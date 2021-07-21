@@ -49,23 +49,23 @@ struct __attribute__((__packed__)) IPv4Header
 };
 
 struct __attribute__((__packed__)) IPv6Header
-  {
-        union
+{
+    union
+    {
+        struct ip6_hdrctl
         {
-            struct ip6_hdrctl
-            {
-                uint32_t ip6_un1_flow;   /* 4 bits version, 8 bits TC, 20 bits flow-ID */
-                uint16_t ip6_un1_plen;   /* payload length */
-                uint8_t  ip6_un1_nxt;    /* next header */
-                uint8_t  ip6_un1_hlim;   /* hop limit */
-            } ip6_un1;
+            uint32_t ip6_un1_flow;   /* 4 bits version, 8 bits TC, 20 bits flow-ID */
+            uint16_t ip6_un1_plen;   /* payload length */
+            uint8_t  ip6_un1_nxt;    /* next header */
+            uint8_t  ip6_un1_hlim;   /* hop limit */
+        } ip6_un1;
 
-            uint8_t ip6_un2_vfc;       /* 4 bits version, top 4 bits tclass */
-        } ip6_ctlun;
+        uint8_t ip6_un2_vfc;       /* 4 bits version, top 4 bits tclass */
+    } ip6_ctlun;
 
-        struct in6_addr ip6_src;      /* source address */
-        struct in6_addr ip6_dst;      /* destination address */
-  };
+    struct in6_addr ip6_src;      /* source address */
+    struct in6_addr ip6_dst;      /* destination address */
+};
 
 struct __attribute__((__packed__)) ICMPv4Header
 {
@@ -97,6 +97,16 @@ struct __attribute__((__packed__)) ICMPv6Header
     uint16_t    icmp6_cksum;  /* checksum field */
 
     uint8_t data[];
+};
+
+struct __attribute__((__packed__)) ICMPv6PseudoHeader
+{
+    struct in6_addr ip6_src;      /* source address */
+    struct in6_addr ip6_dst;      /* destination address */
+
+    uint32_t payloadLength;
+    uint8_t zeroes[3];
+    uint8_t nextHeader;
 };
 
 #endif

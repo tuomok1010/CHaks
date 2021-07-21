@@ -58,10 +58,16 @@ namespace PacketCraft
     int EnablePortForwarding();
     int DisablePortForwarding();
 
-    uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
-    uint16_t CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes);
+    // TODO: check all the checksum calculation/verifications and make sure they work!
+    uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes);
     bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
-    bool32 VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes);
+
+    uint16_t CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes);
+    bool32 VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes);
+
+    uint16_t CalculateICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
+    bool32 VerifyICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
+    ////////////////////////
 
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
     int PrintIPAddr(const sockaddr_in& addr, const char* prefix = "", const char* suffix = "");

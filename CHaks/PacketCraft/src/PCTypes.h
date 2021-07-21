@@ -7,6 +7,9 @@
 #define IPV4_ALEN 4
 #define IPV6_ALEN 16
 
+// NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
+#define PC_PROTO_ETH        UINT16_MAX
+
 // PacketCraft::Packet layer types
 // NOTE: if you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
 #define PC_NONE             0x0000

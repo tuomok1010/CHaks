@@ -52,7 +52,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IPV6));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
@@ -78,20 +78,22 @@ int main(int argc, char** argv)
     //const char* dstIP = "::1";
     //const char* dstMAC = "00:00:00:00:00:00";
 
-    PacketCraft::Packet ping6Packet;
-
-    if(ping6Packet.Receive(socketFd, 0) == APPLICATION_ERROR)
+    while(true)
     {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "ping6Packet.Receive() error!");
-        return APPLICATION_ERROR;
+        PacketCraft::Packet ping6Packet;
+        if(ping6Packet.Receive(socketFd, 0) == APPLICATION_ERROR)
+        {
+            close(socketFd);
+            LOG_ERROR(APPLICATION_ERROR, "ping6Packet.Receive() error!");
+            return APPLICATION_ERROR;
+        }
+
+        IPv6Header test;
+        ICMPv6Header test2;
+
+
+        ping6Packet.Print();
     }
-
-    IPv6Header test;
-    ICMPv6Header test2;
-    
-
-    ping6Packet.Print();
 
     close(socketFd);
 

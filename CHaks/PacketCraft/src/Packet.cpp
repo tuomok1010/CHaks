@@ -112,7 +112,7 @@ int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr*
 
 int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTimeoutMS)
 {
-    uint8_t packet[IP_MAXPACKET]{}; // TODO: don't do this on the stack!
+    uint8_t* packet = (uint8_t*)malloc(IP_MAXPACKET);
     sockaddr fromInfo{};
     socklen_t fromInfoLen{sizeof(fromInfo)};
 
@@ -125,11 +125,13 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
     int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
     if(nEvents == -1)
     {
+        free(packet);
         // LOG_ERROR(APPLICATION_ERROR, "poll() error!");
         return APPLICATION_ERROR;
     }
     else if(nEvents == 0)
     {
+        free(packet);
         // LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
         return APPLICATION_ERROR;
     }
@@ -138,11 +140,13 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
         bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
         if(bytesReceived == -1)
         {
+            free(packet);
             // LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
             return APPLICATION_ERROR;
         }
         else if(bytesReceived == 0)
         {
+            free(packet);
             // LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
             return APPLICATION_ERROR;
         }
@@ -151,16 +155,19 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
             ResetPacketBuffer();
             if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
             {
+                free(packet);
                 // LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
                 return APPLICATION_ERROR;
             }
             else
             {
+                free(packet);
                 return NO_ERROR;
             }
         }
     }
 
+    free(packet);
     // LOG_ERROR(APPLICATION_ERROR, "unknown error!");
     return APPLICATION_ERROR;
 }
@@ -190,7 +197,7 @@ int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint
 {
     switch(protocol)
     {
-        case 0:
+        case PC_PROTO_ETH:
         {
             EthHeader* ethHeader = (EthHeader*)GetLayerStart(layerToPrintIndex);
             protocol = ntohs(ethHeader->ether_type);
@@ -255,7 +262,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
 {
     switch(protocol)
     {
-        case 0:
+        case PC_PROTO_ETH:
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(data, packet, ETH_HLEN);
@@ -309,7 +316,6 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             {
                 // checks if there is a data field present. TODO: do we need to do anything?
             }
-
             return NO_ERROR;
         }
         case IPPROTO_ICMPV6: // TODO: TEST!!!
@@ -321,7 +327,6 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             {
                 // checks if there is a data field present. TODO: do we need to do anything?
             }
-
             return NO_ERROR;
         }
         default:

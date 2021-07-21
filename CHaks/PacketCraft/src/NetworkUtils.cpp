@@ -510,17 +510,17 @@ int PacketCraft::DisablePortForwarding()
     return NO_ERROR;
 }
 
-uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes)
+uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes)
 {
     uint16_t* header16 = (uint16_t*)ipv4Header;
     uint32_t sum = 0;
-    while(ipv4HeaderSizeInBytes > 1)  
+    while(ipv4HeaderAndOptionsSizeInBytes > 1)  
     {
         sum += *header16++;
-        ipv4HeaderSizeInBytes -= 2;
+        ipv4HeaderAndOptionsSizeInBytes -= 2;
     }
 
-    if(ipv4HeaderSizeInBytes > 0)
+    if(ipv4HeaderAndOptionsSizeInBytes > 0)
         sum += *(uint8_t*)header16;
 
     while(sum >> 16)
@@ -529,22 +529,17 @@ uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderS
     return ~(uint16_t)sum;
 }
 
-uint16_t PacketCraft::CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes)
-{
-    return CalculateIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes);
-}
-
-bool32 PacketCraft::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes)
+bool32 PacketCraft::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes)
 {
     uint16_t* header16 = (uint16_t*)ipv4Header;
     uint32_t sum = 0;
-    while(ipv4HeaderSizeInBytes > 1)  
+    while(ipv4HeaderAndOptionsSizeInBytes > 1)  
     {
         sum += *header16++;
-        ipv4HeaderSizeInBytes -= 2;
+        ipv4HeaderAndOptionsSizeInBytes -= 2;
     }
 
-    if(ipv4HeaderSizeInBytes > 0)
+    if(ipv4HeaderAndOptionsSizeInBytes > 0)
         sum += *(uint8_t*)header16;
 
     while(sum >> 16)
@@ -556,9 +551,56 @@ bool32 PacketCraft::VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeIn
         return FALSE;
 }
 
-bool32 PacketCraft::VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderSizeInBytes)
+uint16_t PacketCraft::CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes)
 {
-    return VerifyIPv4Checksum(icmpv4Header, icmpvHeaderSizeInBytes);
+    return CalculateIPv4Checksum(icmpv4Header, icmpvHeaderAndDataSizeInBytes);
+}
+
+bool32 PacketCraft::VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes)
+{
+    return VerifyIPv4Checksum(icmpv4Header, icmpvHeaderAndDataSizeInBytes);
+}
+
+uint16_t PacketCraft::CalculateICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes)
+{
+    // construct a pseudoheader
+    ICMPv6PseudoHeader pseudoHeader;
+    IPv6Header* ipv6HeaderPtr = (IPv6Header*)ipv6Header;
+    memcpy(&pseudoHeader.ip6_src, &ipv6HeaderPtr->ip6_src, IPV6_ALEN);
+    memcpy(&pseudoHeader.ip6_dst, &ipv6HeaderPtr->ip6_dst, IPV6_ALEN);
+    pseudoHeader.payloadLength = ipv6HeaderPtr->ip6_ctlun.ip6_un1.ip6_un1_plen;
+    memset(pseudoHeader.zeroes, 0, 3);
+    pseudoHeader.nextHeader = ipv6HeaderPtr->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+    size_t dataSize = sizeof(pseudoHeader) + icmpv6HeaderAndDataSizeInBytes;
+    uint8_t* data = (uint8_t*)malloc(dataSize);
+    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+    memcpy(data + sizeof(pseudoHeader), icmpv6Header, icmpv6HeaderAndDataSizeInBytes);
+
+    uint16_t sum = CalculateIPv4Checksum(data, dataSize);
+    free(data);
+    return sum;
+}
+
+bool32 PacketCraft::VerifyICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes)
+{
+    // construct a pseudoheader
+    ICMPv6PseudoHeader pseudoHeader;
+    IPv6Header* ipv6HeaderPtr = (IPv6Header*)ipv6Header;
+    memcpy(&pseudoHeader.ip6_src, &ipv6HeaderPtr->ip6_src, IPV6_ALEN);
+    memcpy(&pseudoHeader.ip6_dst, &ipv6HeaderPtr->ip6_dst, IPV6_ALEN);
+    pseudoHeader.payloadLength = ipv6HeaderPtr->ip6_ctlun.ip6_un1.ip6_un1_plen;
+    memset(pseudoHeader.zeroes, 0, 3);
+    pseudoHeader.nextHeader = ipv6HeaderPtr->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+    size_t dataSize = sizeof(pseudoHeader) + icmpv6HeaderAndDataSizeInBytes;
+    uint8_t* data = (uint8_t*)malloc(dataSize);
+    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+    memcpy(data + sizeof(pseudoHeader), icmpv6Header, icmpv6HeaderAndDataSizeInBytes);
+
+    bool32 result = VerifyICMPv4Checksum(data, dataSize);
+    free(data);
+    return result;
 }
 
 int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
@@ -740,11 +782,12 @@ int PacketCraft::PrintIPv4Layer(IPv4Header* ipv4Header)
 
     if(hasIpv4Options == TRUE)
     {
-        std::cout << "\n";
-
         int newLineAt = 7;
         for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
         {
+            if(i == 0)
+                std::cout << "\noptions:\n";
+
             std::cout << std::hex << ipv4Header->options[i];
             if(i % newLineAt == 0)
                 std::cout << "\n";
@@ -803,19 +846,24 @@ int PacketCraft::PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize)
         << "type: "           << (uint16_t)icmpv4Header->type << "\n"
         << "code: "           << (uint16_t)icmpv4Header->code << "\n"
         << "checksum: "       << ntohs(icmpv4Header->checksum) << "(" << icmpv4ChecksumVerified << ")" << "\n"
-        << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence) << "\n";
+        << "id: "             << ntohs(icmpv4Header->un.echo.id) << " sequence: " << ntohs(icmpv4Header->un.echo.sequence);
 
     int newLineAt = 15;
     unsigned char* dataPtr = (unsigned char*)icmpv4Header->data;
 
     for(unsigned int i = 0; i < dataSize; ++i)
     {
+        if(i == 0)
+            std::cout << "\ndata:\n";
+
         std::cout << *dataPtr++;
         if(i % newLineAt == 0)
         {
             std::cout << "\n";
         }
     }
+
+    std::cout << "\n . . . . . . . . . . " << std::endl;
 
     return NO_ERROR;
 }
@@ -826,19 +874,24 @@ int PacketCraft::PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize)
         << "[ICMPv6]:\n"
         << "type: "     << (uint16_t)icmpv6Header->icmp6_type << "\n"
         << "code: "     << (uint16_t)icmpv6Header->icmp6_code << "\n"
-        << "checksum: " << ntohs(icmpv6Header->icmp6_cksum) << "\n";
+        << "checksum: " << ntohs(icmpv6Header->icmp6_cksum);
 
     int newLineAt = 15;
     unsigned char* dataPtr = (unsigned char*)icmpv6Header->data;
 
     for(unsigned int i = 0; i < dataSize; ++i)
     {
+        if(i == 0)
+            std::cout << "\ndata:\n";
+
         std::cout << *dataPtr++;
         if(i % newLineAt == 0)
         {
             std::cout << "\n";
         }
     }
+
+    std::cout << "\n . . . . . . . . . . " << std::endl;
 
     return NO_ERROR;
 }

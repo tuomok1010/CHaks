@@ -41,7 +41,7 @@ namespace PacketCraft
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         void ResetPacketBuffer();
-        int Print(uint32_t layerSize = 0, unsigned short protocol = 0, uint32_t layerToPrintIndex = 0);
+        int Print(uint32_t layerSize = 0, unsigned short protocol = PC_PROTO_ETH, uint32_t layerToPrintIndex = 0);
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;
@@ -54,7 +54,7 @@ namespace PacketCraft
         inline uint32_t GetNLayers() const { return nLayers; }
 
         protected:
-        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = 0);
+        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = PC_PROTO_ETH);
         virtual void FreePacket();
 
         /////////////////
