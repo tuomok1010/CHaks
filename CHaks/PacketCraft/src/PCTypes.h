@@ -32,6 +32,12 @@
 
 typedef int32_t bool32;
 
+enum class PingType
+{
+    ECHO_REQUEST,
+    ECHO_REPLY
+};
+
 struct ether_addr;
 struct sockaddr_in;
 struct sockaddr_in6;

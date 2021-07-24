@@ -5,6 +5,17 @@
 #include <net/if.h>
 #include <unistd.h>
 
+#include <iomanip>
+#include <iostream>
+#include <cstring>
+#include <netinet/ip_icmp.h>
+#include <netinet/in.h>
+#include <netinet/ether.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <linux/if_packet.h>
+
 // IPv4PingPacket test
 
 void PrintHelp(char** argv)
@@ -52,7 +63,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IPV6));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
@@ -75,27 +86,18 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    //const char* dstIP = "::1";
-    //const char* dstMAC = "00:00:00:00:00:00";
+    PacketCraft::IPv6PingPacket ipv6PingPacket;
 
-    while(true)
-    {
-        PacketCraft::Packet ping6Packet;
-        if(ping6Packet.Receive(socketFd, 0) == APPLICATION_ERROR)
-        {
-            close(socketFd);
-            LOG_ERROR(APPLICATION_ERROR, "ping6Packet.Receive() error!");
-            return APPLICATION_ERROR;
-        }
+    ipv6PingPacket.Create("00:00:00:00:00:00", "00:00:00:00:00:00", "::1", "::1", PingType::ECHO_REQUEST);
 
-        IPv6Header test;
-        ICMPv6Header test2;
+    std::cout << "created ping packet:\n";
+    ipv6PingPacket.Print();
 
+    ipv6PingPacket.Send(socketFd, ifName);
 
-        ping6Packet.Print();
-    }
-
-    close(socketFd);
+    ipv6PingPacket.Receive(socketFd, 0);
+    std::cout << "received ping packet:\n";
+    ipv6PingPacket.Print();
 
     return NO_ERROR;
 }
