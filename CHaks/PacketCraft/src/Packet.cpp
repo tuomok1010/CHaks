@@ -247,6 +247,19 @@ int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint
             PrintICMPv6Layer(icmpv6Header, layerSize - sizeof(ICMPv6Header));
             return NO_ERROR;
         }
+        case IPPROTO_TCP: // TODO: TEST!!!
+        {
+            TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(layerToPrintIndex);
+            if(tcpHeader->doff > 5)
+            {
+                PrintTCPLayer(tcpHeader, layerSize - sizeof(TCPHeader) - (uint32_t)*tcpHeader->optionsAndData + 1);
+            }
+            else
+            {
+                PrintTCPLayer(tcpHeader, layerSize - sizeof(TCPHeader));
+            }
+            return NO_ERROR;
+        }
         default:
         {
             LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received!");
@@ -301,7 +314,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             memcpy(GetLayerStart(nLayers - 1), packet, sizeof(IPv6Header));
             protocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 
-            if(protocol == IPPROTO_ICMPV6)
+            if(protocol == IPPROTO_ICMPV6 || protocol == IPPROTO_TCP)
                 layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
 
             packet += sizeof(IPv6Header);
@@ -327,6 +340,13 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             {
                 // checks if there is a data field present. TODO: do we need to do anything?
             }
+            return NO_ERROR;
+        }
+        case IPPROTO_TCP:
+        {
+            AddLayer(PC_TCP, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+
             return NO_ERROR;
         }
         default:

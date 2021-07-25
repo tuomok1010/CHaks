@@ -14,7 +14,8 @@ namespace PacketCraft
         {PC_IPV4, "IPV4"},
         {PC_IPV6, "IPV6"},
         {PC_ICMPV4, "ICMPV4"},
-        {PC_ICMPV6, "ICMPV6"}
+        {PC_ICMPV6, "ICMPV6"},
+        {PC_TCP, "TCP"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);
@@ -59,6 +60,7 @@ namespace PacketCraft
     int DisablePortForwarding();
 
     // TODO: check all the checksum calculation/verifications and make sure they work!
+    // TODO: Make only one checksum function and assemble the pseudoheaders etc outside 
     uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes);
     bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
 
@@ -67,6 +69,9 @@ namespace PacketCraft
 
     uint16_t CalculateICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
     bool32 VerifyICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
+
+    uint16_t CalculateTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
+    bool32 VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
     ////////////////////////
 
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
@@ -80,6 +85,7 @@ namespace PacketCraft
     int PrintIPv6Layer(IPv6Header* ipv6Header);
     int PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize = 0);
     int PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize = 0);
+    int PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize = 0);
 
     void PrintLayerTypeStr(const uint32_t layerType, const char* prefix = "", const char* suffix = "");
 }

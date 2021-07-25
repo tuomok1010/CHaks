@@ -19,6 +19,7 @@
 #define PC_IPV6             0x0004
 #define PC_ICMPV4           0x0005
 #define PC_ICMPV6           0x0006
+#define PC_TCP              0x0007
 
 #define PC_MAX_LAYERS       10
 
@@ -50,6 +51,6 @@ struct IPv4Header;
 struct IPv6Header;
 struct ICMPv4Header;
 struct ICMPv6Header;
-
+struct TCPHeader;
 
 #endif

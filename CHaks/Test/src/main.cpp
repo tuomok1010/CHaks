@@ -63,7 +63,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IPV6));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(IPPROTO_TCP));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
@@ -71,7 +71,7 @@ int main(int argc, char** argv)
     }
 
     char myIP[INET6_ADDRSTRLEN]{};
-    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET6) == APPLICATION_ERROR)
+    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
@@ -86,18 +86,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    PacketCraft::IPv6PingPacket ipv6PingPacket;
-
-    ipv6PingPacket.Create("00:00:00:00:00:00", "00:00:00:00:00:00", "::1", "::1", PingType::ECHO_REQUEST);
-
-    std::cout << "created ping packet:\n";
-    ipv6PingPacket.Print();
-
-    ipv6PingPacket.Send(socketFd, ifName);
-
-    ipv6PingPacket.Receive(socketFd, 0);
-    std::cout << "received ping packet:\n";
-    ipv6PingPacket.Print();
+    
 
     return NO_ERROR;
 }

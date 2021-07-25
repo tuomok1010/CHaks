@@ -5,6 +5,7 @@
 
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 
 struct __attribute__ ((__packed__)) EthHeader
 {
@@ -107,6 +108,76 @@ struct __attribute__((__packed__)) ICMPv6PseudoHeader
     uint32_t payloadLength;
     uint8_t zeroes[3];
     uint8_t nextHeader;
+};
+
+struct __attribute__((__packed__)) TCPHeader
+{
+    __extension__ union
+    {
+        struct
+        {
+            uint16_t th_sport;	/* source port */
+            uint16_t th_dport;	/* destination port */
+            tcp_seq th_seq;		/* sequence number */
+            tcp_seq th_ack;		/* acknowledgement number */
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+            uint8_t th_x2:4;	/* (unused) */
+            uint8_t th_off:4;	/* data offset */
+# endif
+# if __BYTE_ORDER == __BIG_ENDIAN
+            uint8_t th_off:4;	/* data offset */
+            uint8_t th_x2:4;	/* (unused) */
+# endif
+            uint8_t th_flags;
+            uint16_t th_win;	/* window */
+            uint16_t th_sum;	/* checksum */
+            uint16_t th_urp;	/* urgent pointer */
+        };
+        struct
+        {
+            uint16_t source;
+            uint16_t dest;
+            uint32_t seq;
+            uint32_t ack_seq;
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+            uint16_t res1:4;
+            uint16_t doff:4;
+            uint16_t fin:1;
+            uint16_t syn:1;
+            uint16_t rst:1;
+            uint16_t psh:1;
+            uint16_t ack:1;
+            uint16_t urg:1;
+            uint16_t res2:2;
+# elif __BYTE_ORDER == __BIG_ENDIAN
+            uint16_t doff:4;
+            uint16_t res1:4;
+            uint16_t res2:2;
+            uint16_t urg:1;
+            uint16_t ack:1;
+            uint16_t psh:1;
+            uint16_t rst:1;
+            uint16_t syn:1;
+            uint16_t fin:1;
+# else
+#  error "Adjust your <bits/endian.h> defines"
+# endif
+            uint16_t window;
+            uint16_t check;
+            uint16_t urg_ptr;
+        };
+    };
+
+    uint8_t optionsAndData[];
+};
+
+struct __attribute__((__packed__)) TCPv4PseudoHeader
+{
+    struct in_addr ip_src;  /* source address */
+    struct in_addr ip_dst;	/* dest address */
+    uint8_t zeroes;
+    uint8_t proto;
+    uint16_t tcpLen;
 };
 
 #endif

@@ -28,7 +28,7 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
 
     if(setsockopt(socketFd, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, PacketCraft::GetStrLen(interfaceName)) == -1)
     {
-        LOG_ERROR(APPLICATION_ERROR, "sesockopt() error!");
+        LOG_ERROR(APPLICATION_ERROR, "setsockopt() error!");
         return APPLICATION_ERROR;
     }
 

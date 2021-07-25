@@ -14,7 +14,10 @@ namespace CHaks
         {"ETHERNET", PC_ETHER_II},
         {"ARP", PC_ARP},
         {"IPV4", PC_IPV4},
-        {"ICMPV4", PC_ICMPV4}
+        {"IPV6", PC_IPV6},
+        {"ICMPV4", PC_ICMPV4},
+        {"ICMPV6", PC_ICMPV6},
+        {"TCP", PC_TCP}
     };
 
     class PacketSniffer

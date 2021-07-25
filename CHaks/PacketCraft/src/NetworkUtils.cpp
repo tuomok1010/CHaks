@@ -603,6 +603,48 @@ bool32 PacketCraft::VerifyICMPv6Checksum(void* ipv6Header, void* icmpv6Header, s
     return result;
 }
 
+uint16_t PacketCraft::CalculateTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes)
+{
+    // construct a pseudoheader
+    TCPv4PseudoHeader pseudoHeader;
+    IPv4Header* ipv4HeaderPtr = (IPv4Header*)ipv4Header;
+    memcpy(&pseudoHeader.ip_src, &ipv4HeaderPtr->ip_src, IPV4_ALEN);
+    memcpy(&pseudoHeader.ip_dst, &ipv4HeaderPtr->ip_dst, IPV4_ALEN);
+    pseudoHeader.proto = ipv4HeaderPtr->ip_p;
+    pseudoHeader.zeroes = 0;
+    pseudoHeader.tcpLen = tcpHeaderAndDataSizeInBytes;
+
+    size_t totalSize = sizeof(pseudoHeader) + tcpHeaderAndDataSizeInBytes;
+    uint8_t* data = (uint8_t*)malloc(totalSize);
+    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+    memcpy(data + sizeof(pseudoHeader), tcpHeader, tcpHeaderAndDataSizeInBytes);
+
+    uint16_t sum = CalculateIPv4Checksum(data, totalSize);
+    free(data);
+    return sum;
+}
+
+bool32 PacketCraft::VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes)
+{
+    // construct a pseudoheader
+    TCPv4PseudoHeader pseudoHeader;
+    IPv4Header* ipv4HeaderPtr = (IPv4Header*)ipv4Header;
+    memcpy(&pseudoHeader.ip_src, &ipv4HeaderPtr->ip_src, IPV4_ALEN);
+    memcpy(&pseudoHeader.ip_dst, &ipv4HeaderPtr->ip_dst, IPV4_ALEN);
+    pseudoHeader.proto = ipv4HeaderPtr->ip_p;
+    pseudoHeader.zeroes = 0;
+    pseudoHeader.tcpLen = tcpHeaderAndDataSizeInBytes;
+
+    size_t totalSize = sizeof(pseudoHeader) + tcpHeaderAndDataSizeInBytes;
+    uint8_t* data = (uint8_t*)malloc(totalSize);
+    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+    memcpy(data + sizeof(pseudoHeader), tcpHeader, tcpHeaderAndDataSizeInBytes);
+
+    bool32 result = VerifyICMPv4Checksum(data, totalSize);
+    free(data);
+    return result;
+}
+
 int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
 {
     int result{APPLICATION_ERROR};
@@ -885,6 +927,72 @@ int PacketCraft::PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize)
             std::cout << "\ndata:\n";
 
         std::cout << *dataPtr++;
+        if(i % newLineAt == 0)
+        {
+            std::cout << "\n";
+        }
+    }
+
+    std::cout << "\n . . . . . . . . . . " << std::endl;
+
+    return NO_ERROR;
+}
+
+int PacketCraft::PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize)
+{
+    std::cout 
+        << "[TCP]:\n"
+        << "source port: "              << ntohs(tcpHeader->source) << " destination port: " << ntohs(tcpHeader->dest) << "\n"
+        << "sequence number: "          << ntohl(tcpHeader->seq) << "\n"
+        << "acknowledgement number: "   << ntohl(tcpHeader->ack_seq) << "\n"
+        << "data offset: "              << tcpHeader->doff << "\n"
+
+        << "flags 0x" << std::hex << (uint16_t)tcpHeader->th_flags << std::dec << ": \n"                    
+        << "FIN(" << tcpHeader->fin << "), " << "SYN(" << tcpHeader->syn << "), " 
+        << "RST(" << tcpHeader->rst << "), " << "PSH(" << tcpHeader->psh << "), " 
+        << "ACK(" << tcpHeader->ack << "), " << "URG(" << tcpHeader->urg << ")\n"
+
+        << "window size: "              << ntohs(tcpHeader->window) << "\n"
+        << "checksum: "                 << ntohs(tcpHeader->check) << "\n"
+        << "urgent pointer: "           << ntohs(tcpHeader->urg_ptr) << "\n";
+
+    uint8_t* optionsPtr = tcpHeader->optionsAndData;
+    int newLineAt = 15;
+
+    // options field is present, TODO: verify!
+    if(tcpHeader->doff > 5)
+    {
+        uint16_t optLen = (uint16_t)*optionsPtr + 1;
+
+        std::cout << "options:\n" << "option kind: " << (uint16_t)*optionsPtr << "\n";
+        ++optionsPtr;
+        std::cout << "option length: "    << (uint16_t)*optionsPtr << "\n";
+        ++optionsPtr;
+
+        for(int i = 0; i < optLen - 2; ++i)
+        {
+            if(i == 0)
+                std::cout << "option data:\n";
+
+            std::cout << (unsigned char)*optionsPtr;
+            ++optionsPtr;
+
+            if(i % newLineAt == 0)
+            {
+                std::cout << "\n";
+            }
+        }
+    }
+
+    // print data
+    for(unsigned int i = 0; i < dataSize; ++i)
+    {
+        if(i == 0)
+            std::cout << "\ndata:\n";
+
+        std::cout << (unsigned char)*optionsPtr;
+        ++optionsPtr;
+
         if(i % newLineAt == 0)
         {
             std::cout << "\n";
