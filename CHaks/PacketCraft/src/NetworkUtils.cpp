@@ -510,6 +510,49 @@ int PacketCraft::DisablePortForwarding()
     return NO_ERROR;
 }
 
+uint16_t PacketCraft::CalculateChecksum(void* data, size_t sizeInBytes)
+{
+    uint16_t* dataPtr16 = (uint16_t*)data;
+    uint32_t sum = 0;
+
+    while(sizeInBytes > 1)  
+    {
+        sum += *dataPtr16++;
+        sizeInBytes -= 2;
+    }
+
+    if(sizeInBytes > 0)
+        sum += *(uint8_t*)dataPtr16;
+
+    while(sum >> 16)
+        sum = (sum & 0xffff) + (sum >> 16);
+
+    return ~(uint16_t)sum;
+}
+
+bool32 PacketCraft::VerifyChecksum(void* data, size_t sizeInBytes)
+{
+    uint16_t* dataPtr16 = (uint16_t*)data;
+    uint32_t sum = 0;
+    while(sizeInBytes > 1)  
+    {
+        sum += *dataPtr16++;
+        sizeInBytes -= 2;
+    }
+
+    if(sizeInBytes > 0)
+        sum += *(uint8_t*)dataPtr16;
+
+    while(sum >> 16)
+        sum = (sum & 0xffff) + (sum >> 16);
+
+    if((uint16_t)sum == 0xffff)
+        return TRUE;
+    else
+        return FALSE;
+}
+
+/*
 uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes)
 {
     uint16_t* header16 = (uint16_t*)ipv4Header;
@@ -644,6 +687,7 @@ bool32 PacketCraft::VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_
     free(data);
     return result;
 }
+*/
 
 int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
 {
@@ -800,7 +844,7 @@ int PacketCraft::PrintIPv4Layer(IPv4Header* ipv4Header)
         return APPLICATION_ERROR;
     }
 
-    const char* ipv4ChecksumVerified = VerifyIPv4Checksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
+    const char* ipv4ChecksumVerified = VerifyChecksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
     bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
     bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
 
@@ -881,7 +925,7 @@ int PacketCraft::PrintIPv6Layer(IPv6Header* ipv6Header)
 
 int PacketCraft::PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize)
 {
-    const char* icmpv4ChecksumVerified = VerifyIPv4Checksum(icmpv4Header, sizeof(ICMPv4Header) + dataSize) == TRUE ? "verified" : "unverified";
+    const char* icmpv4ChecksumVerified = VerifyChecksum(icmpv4Header, sizeof(ICMPv4Header) + dataSize) == TRUE ? "verified" : "unverified";
 
     std::cout
         << "[ICMPv4]:\n"

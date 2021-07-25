@@ -61,6 +61,10 @@ namespace PacketCraft
 
     // TODO: check all the checksum calculation/verifications and make sure they work!
     // TODO: Make only one checksum function and assemble the pseudoheaders etc outside 
+    uint16_t CalculateChecksum(void* data, size_t sizeInBytes);
+    bool32 VerifyChecksum(void* data, size_t sizeInBytes);
+
+/*
     uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes);
     bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
 
@@ -72,6 +76,7 @@ namespace PacketCraft
 
     uint16_t CalculateTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
     bool32 VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
+*/
     ////////////////////////
 
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");

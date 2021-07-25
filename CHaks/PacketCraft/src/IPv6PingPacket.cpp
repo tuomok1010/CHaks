@@ -47,6 +47,7 @@ int PacketCraft::IPv6PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     icmpv6Header = (ICMPv6Header*)GetLayerStart(2);
     icmpv6Header->icmp6_type = type == PingType::ECHO_REQUEST ? ICMP6_ECHO_REQUEST : ICMP6_ECHO_REPLY;
     icmpv6Header->icmp6_code = 0;
+    icmpv6Header->icmp6_cksum = 0;
 
     // NOTE: these are the identifier and sequence 
     uint16_t* dataPtr16 = (uint16_t*)icmpv6Header->data;
@@ -54,8 +55,21 @@ int PacketCraft::IPv6PingPacket::Create(const ether_addr& srcMAC, const ether_ad
     ++dataPtr16;
     *dataPtr16 = htons(0x1);
 
-    icmpv6Header->icmp6_cksum = 0;
-    icmpv6Header->icmp6_cksum = CalculateICMPv6Checksum(ipv6Header, icmpv6Header, sizeof(*icmpv6Header) + 4);
+    // construct a pseudoheader for calculating checksum
+    ICMPv6PseudoHeader pseudoHeader;
+    memcpy(&pseudoHeader.ip6_src, &ipv6Header->ip6_src, IPV6_ALEN);
+    memcpy(&pseudoHeader.ip6_dst, &ipv6Header->ip6_dst, IPV6_ALEN);
+    pseudoHeader.payloadLength = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen;
+    memset(pseudoHeader.zeroes, 0, 3);
+    pseudoHeader.nextHeader = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+    size_t totalSize = sizeof(pseudoHeader) + sizeof(*icmpv6Header) + 4;
+    uint8_t* data = (uint8_t*)malloc(totalSize);
+    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+    memcpy(data + sizeof(pseudoHeader), icmpv6Header, sizeof(*icmpv6Header) + 4);
+
+    icmpv6Header->icmp6_cksum = CalculateChecksum(data, totalSize);
+    free(data);
 
     return NO_ERROR;
 }
