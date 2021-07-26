@@ -1,12 +1,18 @@
 #include "PacketSniffer.h"
 
 #include <iostream>
+#include <ctime>
+#include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <unistd.h>
 #include <poll.h>
 #include <netinet/in.h>
 
 CHaks::PacketSniffer::PacketSniffer() :
-    socketFd(-1)
+    socketFd(-1),
+    packetNumber(0)
 {
 
 }
@@ -42,6 +48,24 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
         if(IsProtocolSupported(protocolsSupplied[i]) == FALSE)
         {
             LOG_ERROR(APPLICATION_ERROR, "unsupported protocol supplied!");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    if(saveToFile == TRUE)
+    {
+        // current date/time based on current system
+        time_t now = time(0);
+        // convert now to string form
+        char* dt = ctime(&now);
+
+        char path[PATH_MAX_SIZE]{"../../saves/"};
+        memcpy(path + PacketCraft::GetStrLen(path), dt, PacketCraft::GetStrLen(dt));
+        memcpy(savePath, path, PacketCraft::GetStrLen(path) + 1);
+
+        if(mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO) == -1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "mkdir() error!");
             return APPLICATION_ERROR;
         }
     }
@@ -155,13 +179,26 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
     {
         std::cout << "Packet received:\n";
 
-        if(packet.Print() == APPLICATION_ERROR)
+        if(saveToFile == TRUE)
         {
-            LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
-            return APPLICATION_ERROR;
+            if(SavePacketToFile(packet) == APPLICATION_ERROR)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "SavePacketToFile() error!");
+                return APPLICATION_ERROR;
+            }
+        }
+        else
+        {
+            if(packet.Print() == APPLICATION_ERROR)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
+                return APPLICATION_ERROR;
+            }
+
+            std::cout << std::endl;
         }
 
-        std::cout << std::endl;
+        ++packetNumber;
     }
 
     return NO_ERROR;
@@ -171,4 +208,27 @@ void CHaks::PacketSniffer::CloseSocket()
 {
     close(socketFd);
     socketFd = -1;
+}
+
+int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
+{
+    char fileName[100]{};
+    char* packetNumStr = std::to_string(packetNumber).c_str();
+    PacketCraft::CopyStr(fileName, sizeof(fileName), packetNumStr);
+
+    char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr);
+
+    for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
+    {
+        const char* proto = PacketCraft::ProtoUint32ToStr(packet.GetLayerType(i));
+        PacketCraft::CopyStr(fileNamePtr, PROTOCOL_NAME_SIZE, proto);
+        fileNamePtr += PacketCraft::GetStrLen(proto);
+        PacketCraft::CopyStr(fileNamePtr, 1, " ");
+        ++fileNamePtr;
+    }
+
+    std::cout << "filename: " << fileName << std::endl;
+
+    //file.open("test.txt");
+    //file.close();
 }

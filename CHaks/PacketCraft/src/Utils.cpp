@@ -54,7 +54,6 @@ int PacketCraft::FindInStr(const char* str, const char* pattern)
     return -1;
 }
 
-
 // Debug utils
 void PacketCraft::PrintError(const int errorCode, const char* func, const char* msg)
 {

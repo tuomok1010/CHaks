@@ -9,14 +9,15 @@ void PrintHelp(char** argv)
 {
     std::cout
         << "To use the program, provide the arguments in the following format:\n"
-        << argv[0] << " <interface name> <protocols>\n\n"
+        << argv[0] << " <interface name> <save to file> <protocols>\n\n"
         << "<interface name>: the interface you wish to monitor.\n"
+        << "<save to file(true/false)>: if true saves packet data to file, if false prints packets in console"
         << "<protocols>: types of packets to monitor. Following protocols are supported:\n";
 
    for(std::pair<const char*, uint32_t> e : CHaks::supportedProtocols)
         std::cout << e.first << " ";
 
-    std::cout << "\nExample: " << argv[0] << " eth0 " << "ARP " << "ICMPV4" << std::endl;
+    std::cout << "\nExample: " << argv[0] << " eth0 " << "1" << "ARP " << "ICMPV4" << std::endl;
 }
 
 // TODO: make this more bulletproof
@@ -28,7 +29,7 @@ int ProcessArgs(int argc, char** argv, char* ifName, CHaks::PacketSniffer& packe
         exit(EXIT_SUCCESS);
     }
 
-    if(argc > N_PROTOCOLS_SUPPORTED + 2 || argc < 3)
+    if(argc > N_PROTOCOLS_SUPPORTED + 3 || argc < 4)
         return APPLICATION_ERROR;
 
     if(PacketCraft::GetStrLen(argv[1]) > IFNAMSIZ)
@@ -37,7 +38,17 @@ int ProcessArgs(int argc, char** argv, char* ifName, CHaks::PacketSniffer& packe
 
     PacketCraft::CopyStr(ifName, IFNAMSIZ, argv[1]);
 
-    for(int i = 2, j = 0; i < argc; ++i, ++j)
+    if((argv[2][0] == '1' || argv[2][0] == 't' || argv[2][0] == 'T' || argv[2][0] == 'y' || argv[2][0] == 'Y') || 
+        (PacketCraft::CompareStr(argv[2], "true") == TRUE) || PacketCraft::CompareStr(argv[2], "TRUE") == TRUE)
+    {
+        packetSniffer.saveToFile = TRUE;
+    }
+    else
+    {
+        packetSniffer.saveToFile = FALSE;
+    }
+
+    for(int i = 3, j = 0; i < argc; ++i, ++j)
     {
         PacketCraft::CopyStr(packetSniffer.protocolsSupplied[j], PROTOCOL_NAME_SIZE, argv[i]);
     }
