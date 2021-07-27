@@ -5,6 +5,7 @@
 #include <cstring>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fstream>
 
 #include <unistd.h>
 #include <poll.h>
@@ -85,8 +86,6 @@ int CHaks::PacketSniffer::Sniff()
     pollFds[1].events = POLLIN;
 
     std::cout << "sniffing... press enter to stop\n" << std::endl;
-    // sleeping for 2 seconds to make sure user sees the message above
-    sleep(2);
 
     while(true)
     {
@@ -177,10 +176,9 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
 
     if(isValid == TRUE)
     {
-        std::cout << "Packet received:\n";
-
         if(saveToFile == TRUE)
         {
+            std::cout << "Packet saved to file\n";
             if(SavePacketToFile(packet) == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "SavePacketToFile() error!");
@@ -189,6 +187,7 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
         }
         else
         {
+            std::cout << "Packet received:\n";
             if(packet.Print() == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "PrintPacket() error!");
@@ -213,10 +212,11 @@ void CHaks::PacketSniffer::CloseSocket()
 int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
 {
     char fileName[100]{};
-    char* packetNumStr = std::to_string(packetNumber).c_str();
+    const char* packetNumStr = std::to_string(packetNumber).c_str();
     PacketCraft::CopyStr(fileName, sizeof(fileName), packetNumStr);
 
-    char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr);
+    PacketCraft::CopyStr(fileName + PacketCraft::GetStrLen(packetNumStr), 1, " ");
+    char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr) + 1;
 
     for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
     {
@@ -227,8 +227,13 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
         ++fileNamePtr;
     }
 
-    std::cout << "filename: " << fileName << std::endl;
+    char fullPath[PATH_MAX_SIZE]{};
+    memcpy(fullPath, savePath, PacketCraft::GetStrLen(savePath));
+    memcpy(fullPath + PacketCraft::GetStrLen(savePath), fileName, PacketCraft::GetStrLen(fileName) + 1);
 
-    //file.open("test.txt");
-    //file.close();
+    std::ofstream file;
+    file.open(fullPath, std::ofstream::out | std::ofstream::app);
+    
+    file.close();
+    return NO_ERROR;
 }

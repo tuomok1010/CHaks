@@ -59,11 +59,15 @@ namespace PacketCraft
     int EnablePortForwarding();
     int DisablePortForwarding();
 
+    uint32_t CalculateICMPv4DataSize(IPv4Header* ipv4Header, ICMPv4Header* icmpv4Header);
+    uint32_t CalculateICMPv6DataSize(IPv6Header* ipv6Header, ICMPv6Header* icmpv6Header);
+
     // TODO: check all the checksum calculation/verifications and make sure they work!
     // TODO: Make only one checksum function and assemble the pseudoheaders etc outside 
     uint16_t CalculateChecksum(void* data, size_t sizeInBytes);
     bool32 VerifyChecksum(void* data, size_t sizeInBytes);
 
+// old checksum functions
 /*
     uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes);
     bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
@@ -93,6 +97,15 @@ namespace PacketCraft
     int PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize = 0);
 
     void PrintLayerTypeStr(const uint32_t layerType, const char* prefix = "", const char* suffix = "");
+
+    int ConvertEthLayerToString(char* buffer, size_t bufferSize, EthHeader* ethHeader);
+    int ConvertARPLayerToString(char* buffer, size_t bufferSize, ARPHeader* arpHeader);
+    int ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4Header* ipv4Header);
+    int ConvertIPv6LayerToString(char* buffer, size_t bufferSize, IPv6Header* ipv6Header);
+    int ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICMPv4Header* icmpv4Header, size_t icmpv4DataSize = 0);
+    int ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize = 0);
+    int ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize = 0);
+
 }
 
 #endif

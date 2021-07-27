@@ -63,7 +63,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(IPPROTO_TCP));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(IPPROTO_IPV6));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
@@ -71,7 +71,7 @@ int main(int argc, char** argv)
     }
 
     char myIP[INET6_ADDRSTRLEN]{};
-    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET) == APPLICATION_ERROR)
+    if(PacketCraft::GetIPAddr(myIP, ifName, AF_INET6) == APPLICATION_ERROR)
     {
         close(socketFd);
         LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error!");
@@ -86,7 +86,21 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    
+    PacketCraft::IPv6PingPacket pingPacket;
+    pingPacket.Create(myMAC, "52:54:00:12:35:00", myIP, "::1", PingType::ECHO_REQUEST);
+
+    char buffer[1000]{};
+    ICMPv6Header* icmpv6Header = (ICMPv6Header*)pingPacket.GetLayerStart(2);
+    IPv6Header* ipv6Header = (IPv6Header*)pingPacket.GetLayerStart(1);
+
+    uint32_t icmpv6DataSize = PacketCraft::CalculateICMPv6DataSize(ipv6Header, icmpv6Header);
+    PacketCraft::ConvertICMPv6LayerToString(buffer, 1000, icmpv6Header, icmpv6DataSize);
+
+    std::cout << "BUFFER:\n\n" << buffer << std::endl;
+
+    std::cout << "data size was: " << icmpv6DataSize << std::endl;
+
+    close(socketFd);
 
     return NO_ERROR;
 }

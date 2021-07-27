@@ -3,7 +3,6 @@
 
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 #include <unordered_map>
-#include <fstream>
 
 #define N_PROTOCOLS_SUPPORTED   4
 #define PROTOCOL_NAME_SIZE      10
@@ -42,7 +41,6 @@ namespace CHaks
         bool32 IsProtocolSupported(uint32_t protocol) const;
         int SavePacketToFile(const PacketCraft::Packet& packet);
 
-        std::ofstream file;
         char savePath[PATH_MAX_SIZE];
         unsigned long long packetNumber;
     };

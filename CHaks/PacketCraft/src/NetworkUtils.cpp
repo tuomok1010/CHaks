@@ -510,6 +510,22 @@ int PacketCraft::DisablePortForwarding()
     return NO_ERROR;
 }
 
+uint32_t PacketCraft::CalculateICMPv4DataSize(IPv4Header* ipv4Header, ICMPv4Header* icmpv4Header)
+{
+    return (ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8)) - sizeof(ICMPv4Header);
+}
+
+uint32_t PacketCraft::CalculateICMPv6DataSize(IPv6Header* ipv6Header, ICMPv6Header* icmpv6Header)
+{
+    // TODO: take ipv6 extension headers into account!!!
+    if(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt == IPPROTO_ICMPV6)
+    {
+        return (ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen)) - sizeof(ICMPv6Header);
+    }
+
+    return 0;
+}
+
 uint16_t PacketCraft::CalculateChecksum(void* data, size_t sizeInBytes)
 {
     uint16_t* dataPtr16 = (uint16_t*)data;
@@ -552,6 +568,7 @@ bool32 PacketCraft::VerifyChecksum(void* data, size_t sizeInBytes)
         return FALSE;
 }
 
+// old checksum functions
 /*
 uint16_t PacketCraft::CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes)
 {
@@ -1051,4 +1068,245 @@ int PacketCraft::PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize)
 void PacketCraft::PrintLayerTypeStr(const uint32_t layerType, const char* prefix, const char* suffix)
 {
     std::cout << prefix << networkProtocols.at(layerType) << suffix << std::flush;
+}
+
+int PacketCraft::ConvertEthLayerToString(char* buffer, size_t bufferSize, EthHeader* ethHeader)
+{
+    char ethDstAddr[ETH_ADDR_STR_LEN]{};    /* destination eth addr	*/
+    char ethSrcAddr[ETH_ADDR_STR_LEN]{};    /* source ether addr	*/
+
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_dhost, ethDstAddr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r((ether_addr*)ethHeader->ether_shost, ethSrcAddr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    int res = snprintf(buffer, bufferSize, "[ETHERNET]:\ndestination: %s\nsource: %s\ntype: 0x%x(%u)\n. . . . . . . . . . \n", 
+        ethDstAddr, ethSrcAddr, ntohs(ethHeader->ether_type), ntohs(ethHeader->ether_type));
+    
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertARPLayerToString(char* buffer, size_t bufferSize, ARPHeader* arpHeader)
+{
+    char ar_sha[ETH_ADDR_STR_LEN]{};    /* Sender hardware address.  */
+    char ar_sip[INET_ADDRSTRLEN]{};     /* Sender IP address.  */
+    char ar_tha[ETH_ADDR_STR_LEN]{};    /* Target hardware address.  */
+    char ar_tip[INET_ADDRSTRLEN]{};     /* Target IP address.  */
+
+    if(inet_ntop(AF_INET, arpHeader->ar_sip, ar_sip, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET, arpHeader->ar_tip, ar_tip, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r((ether_addr*)arpHeader->ar_sha, ar_sha) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_ntoa_r((ether_addr*)arpHeader->ar_tha, ar_tha) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    int res = snprintf(buffer, bufferSize, "[ARP]:\nhardware type: %u\nprotocol type: %u\nhardware size: %u\nprotocol size: %u\nop code: %u(%s)\n\
+source MAC: %s\nsource IP: %s\ndestination MAC: %s\ndestination IP: %s\n . . . . . . . . . . \n", ntohs(arpHeader->ar_hrd), ntohs(arpHeader->ar_pro), 
+(uint16_t)arpHeader->ar_hln, (uint16_t)arpHeader->ar_pln, ntohs(arpHeader->ar_op), 
+(ntohs(arpHeader->ar_op) == 1 ? "request" : "reply"), ar_sha, ar_sip, ar_tha, ar_tip);
+    
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4Header* ipv4Header)
+{
+    char srcIPStr[INET_ADDRSTRLEN]{};
+    char dstIPStr[INET_ADDRSTRLEN]{};
+
+    if(inet_ntop(AF_INET, &ipv4Header->ip_src, srcIPStr, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET, &ipv4Header->ip_dst, dstIPStr, INET_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    const char* ipv4ChecksumVerified = VerifyChecksum(ipv4Header, ipv4Header->ip_hl) == TRUE ? "verified" : "unverified";
+    bool32 flagDFSet = ((ntohs(ipv4Header->ip_off)) & (IP_DF)) != 0;
+    bool32 flagMFSet = ((ntohs(ipv4Header->ip_off)) & (IP_MF)) != 0;
+
+    // TODO: test/improve options printing
+    bool32 hasIpv4Options = ipv4Header->ip_hl > 5 ? TRUE : FALSE;
+    uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
+
+    char options[ipv4OptionsSize]{};
+    char* optionsPtr = options;
+
+    int newLineAt = 15;
+    for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
+    {
+        *optionsPtr++ = ipv4Header->options[i];
+        if(i % newLineAt == 0)
+        {
+            *optionsPtr++ = '\n';
+        }
+    }
+
+    int res = snprintf(buffer, bufferSize, "[IPv4]:\nip version: %u\nheader length: %u\nToS: 0x%x\ntotal length: %u\nidentification: %u\n\
+flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u(%s)\nsource: %s destination: %s\noptions:\n%s\n\
+ . . . . . . . . . . \n",
+ipv4Header->ip_v, ipv4Header->ip_hl, (uint16_t)ipv4Header->ip_tos, ntohs(ipv4Header->ip_len), ntohs(ipv4Header->ip_id), ntohs(ipv4Header->ip_off), 
+ntohs(ipv4Header->ip_off), flagDFSet, flagMFSet, (uint16_t)ipv4Header->ip_ttl, (uint16_t)ipv4Header->ip_p, ntohs(ipv4Header->ip_sum), ipv4ChecksumVerified,
+srcIPStr, dstIPStr, (hasIpv4Options == TRUE ? options : "NONE FOUND"));
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertIPv6LayerToString(char* buffer, size_t bufferSize, IPv6Header* ipv6Header)
+{
+    char srcIPStr[INET6_ADDRSTRLEN]{};
+    char dstIPStr[INET6_ADDRSTRLEN]{};
+
+    if(inet_ntop(AF_INET6, &ipv6Header->ip6_src, srcIPStr, INET6_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, dstIPStr, INET6_ADDRSTRLEN) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+        return APPLICATION_ERROR;
+    }
+
+    uint32_t version =      ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0xf0000000) >> 28);
+    uint32_t trafficClass = ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x0ff00000) >> 20);   // NOTE: not tested
+    uint32_t dscp =         ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x0fc00000) >> 22);   // NOTE: not tested
+    uint32_t ecn =          ((ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x00300000) >> 20);   // NOTE: not tested
+    uint32_t flowLabel =    ntohl(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow) & 0x000fffff;
+
+    int res = snprintf(buffer, bufferSize, "[IPv6]:\nversion: %u\ntraffic class: 0x%x(dscp: %u ecn: %u)\nflow label: 0x%x\npayload length: %u\n\
+next header: %u\nhop limit: %u\nsource: %s\ndestination: %s\n . . . . . . . . . . \n", version, trafficClass, dscp, ecn, flowLabel,
+ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen), (uint16_t)ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt, (uint16_t)ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim,
+srcIPStr, dstIPStr);
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICMPv4Header* icmpv4Header, size_t icmpv4DataSize)
+{
+    const char* icmpv4ChecksumVerified = VerifyChecksum(icmpv4Header, sizeof(ICMPv4Header) + icmpv4DataSize) == TRUE ? "verified" : "unverified";
+
+    char data[icmpv4DataSize]{};
+    char* dataPtr = data;
+
+    // TODO: test/improve data printing
+    int newLineAt = 15;
+    for(unsigned int i = 0; i < icmpv4DataSize; ++i)
+    {
+        *dataPtr++ = icmpv4Header->data[i];
+        if(i % newLineAt == 0)
+        {
+            *dataPtr++ = '\n';
+        }
+    }
+
+    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata:\n%s\n . . . . . . . . . . \n",
+    (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, ntohs(icmpv4Header->un.echo.id),
+    ntohs(icmpv4Header->un.echo.sequence), (icmpv4DataSize > 0 ? data : "NONE FOUND"));
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize)
+{
+    char data[icmpv6DataSize]{};
+    char* dataPtr = data;
+
+    // TODO: test/improve data printing
+    int newLineAt = 15;
+    for(unsigned int i = 0; i < icmpv6DataSize; ++i)
+    {
+        *dataPtr++ = icmpv6Header->data[i];
+        if(i % newLineAt == 0)
+        {
+            *dataPtr++ = '\n';
+        }
+    }
+
+    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\ndata:\n%s\n . . . . . . . . . . \n",
+    (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (icmpv6DataSize > 0 ? data : "NONE FOUND"));
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize)
+{
+    return NO_ERROR;
 }
