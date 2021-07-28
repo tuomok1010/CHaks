@@ -1187,11 +1187,11 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
     }
 
     int res = snprintf(buffer, bufferSize, "[IPv4]:\nip version: %u\nheader length: %u\nToS: 0x%x\ntotal length: %u\nidentification: %u\n\
-flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u(%s)\nsource: %s destination: %s\noptions:\n%s\n\
+flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u(%s)\nsource: %s\ndestination: %s\noptions(%u bytes):\n%s\n\
  . . . . . . . . . . \n",
 ipv4Header->ip_v, ipv4Header->ip_hl, (uint16_t)ipv4Header->ip_tos, ntohs(ipv4Header->ip_len), ntohs(ipv4Header->ip_id), ntohs(ipv4Header->ip_off), 
 ntohs(ipv4Header->ip_off), flagDFSet, flagMFSet, (uint16_t)ipv4Header->ip_ttl, (uint16_t)ipv4Header->ip_p, ntohs(ipv4Header->ip_sum), ipv4ChecksumVerified,
-srcIPStr, dstIPStr, (hasIpv4Options == TRUE ? options : "NONE FOUND"));
+srcIPStr, dstIPStr, (uint32_t)ipv4OptionsSize, (hasIpv4Options == TRUE ? options : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {
@@ -1251,19 +1251,15 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
     char* dataPtr = data;
 
     // TODO: test/improve data printing
-    int newLineAt = 15;
     for(unsigned int i = 0; i < icmpv4DataSize; ++i)
     {
-        *dataPtr++ = icmpv4Header->data[i];
-        if(i % newLineAt == 0)
-        {
-            *dataPtr++ = '\n';
-        }
+        *dataPtr++ = (uint16_t)icmpv4Header->data[i];
+        std::cout << "data char: " << (uint16_t)icmpv4Header->data[i];
     }
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata:\n%s\n . . . . . . . . . . \n",
+    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
     (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, ntohs(icmpv4Header->un.echo.id),
-    ntohs(icmpv4Header->un.echo.sequence), (icmpv4DataSize > 0 ? data : "NONE FOUND"));
+    ntohs(icmpv4Header->un.echo.sequence), (uint32_t)icmpv4DataSize, (icmpv4DataSize > 0 ? data : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {
@@ -1293,8 +1289,9 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
         }
     }
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\ndata:\n%s\n . . . . . . . . . . \n",
-    (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (icmpv6DataSize > 0 ? data : "NONE FOUND"));
+    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
+    (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (uint32_t)icmpv6DataSize, 
+    (icmpv6DataSize > 0 ? data : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {

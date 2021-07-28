@@ -61,7 +61,7 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
         char* dt = ctime(&now);
 
         char path[PATH_MAX_SIZE]{"../../saves/"};
-        memcpy(path + PacketCraft::GetStrLen(path), dt, PacketCraft::GetStrLen(dt));
+        memcpy(path + PacketCraft::GetStrLen(path), dt, PacketCraft::GetStrLen(dt) - 1);
 
         if(mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO) == -1)
         {
@@ -69,7 +69,7 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
             return APPLICATION_ERROR;
         }
 
-        memcpy(path + PacketCraft::GetStrLen(path), "/\0", 2);
+        memcpy(path + PacketCraft::GetStrLen(path), "/", 1);
         memcpy(savePath, path, PacketCraft::GetStrLen(path) + 1);
     }
 
@@ -217,7 +217,7 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
     const char* packetNumStr = std::to_string(packetNumber).c_str();
     PacketCraft::CopyStr(fileName, sizeof(fileName), packetNumStr);
 
-    PacketCraft::CopyStr(fileName + PacketCraft::GetStrLen(packetNumStr), 1, " ");
+    PacketCraft::CopyStr(fileName + PacketCraft::GetStrLen(packetNumStr), 1, "_");
     char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr) + 1;
 
     for(unsigned int i = 0; i < packet.GetNLayers(); ++i)
@@ -225,11 +225,12 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
         const char* proto = PacketCraft::ProtoUint32ToStr(packet.GetLayerType(i));
         PacketCraft::CopyStr(fileNamePtr, PROTOCOL_NAME_SIZE, proto);
         fileNamePtr += PacketCraft::GetStrLen(proto);
-        PacketCraft::CopyStr(fileNamePtr, 1, " ");
+        PacketCraft::CopyStr(fileNamePtr, 1, "_");
         ++fileNamePtr;
     }
 
-    PacketCraft::CopyStr(fileNamePtr, PacketCraft::GetStrLen(fileNamePtr), ".txt");
+    PacketCraft::CopyStr(fileNamePtr, 5, ".txt");
+    std::cout << "file name is " << fileName << std::endl;
 
     char fullPath[PATH_MAX_SIZE]{};
     memcpy(fullPath, savePath, PacketCraft::GetStrLen(savePath));
@@ -250,14 +251,14 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
             {
                 EthHeader* ethHeader = (EthHeader*)packet.GetLayerStart(i);
                 PacketCraft::ConvertEthLayerToString(buffer, bufferSize, ethHeader);
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_ARP:
             {
                 ARPHeader* arpHeader = (ARPHeader*)packet.GetLayerStart(i);
                 PacketCraft::ConvertARPLayerToString(buffer, bufferSize, arpHeader);
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_IPV4:
@@ -267,7 +268,7 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
 
                 layerSize = ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8);
 
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_IPV6:
@@ -279,21 +280,21 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
                 if(nextProtocol == IPPROTO_ICMPV6)
                     layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
 
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_ICMPV4:
             {
                 ICMPv4Header* icmpv4Header = (ICMPv4Header*)packet.GetLayerStart(i);
                 PacketCraft::ConvertICMPv4LayerToString(buffer, bufferSize, icmpv4Header, layerSize - sizeof(ICMPv4Header));
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_ICMPV6:
             {
                 ICMPv6Header* icmpv6Header = (ICMPv6Header*)packet.GetLayerStart(i);
                 PacketCraft::ConvertICMPv6LayerToString(buffer, bufferSize, icmpv6Header, layerSize - sizeof(ICMPv6Header));
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             case PC_TCP:
@@ -305,7 +306,7 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
                 else
                     PacketCraft::ConvertTCPLayerToString(buffer, bufferSize, tcpHeader, layerSize - sizeof(TCPHeader));
              
-                file.write(buffer, bufferSize);
+                file.write(buffer, PacketCraft::GetStrLen(buffer));
                 break;
             }
             default:
@@ -315,6 +316,8 @@ int CHaks::PacketSniffer::SavePacketToFile(const PacketCraft::Packet& packet)
                 LOG_ERROR(APPLICATION_ERROR, "unknown protocol detected!");
                 return APPLICATION_ERROR;
             }
+
+            memset(buffer, '\0', bufferSize);
         }
     }
     

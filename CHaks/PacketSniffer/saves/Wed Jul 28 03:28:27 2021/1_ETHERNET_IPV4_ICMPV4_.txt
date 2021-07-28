@@ -1,0 +1,30 @@
+[ETHERNET]:
+destination: 8:0:27:5:17:3d
+source: 52:54:0:12:35:0
+type: 0x800(2048)
+. . . . . . . . . . 
+[IPv4]:
+ip version: 4
+header length: 5
+ToS: 0x0
+total length: 84
+identification: 10650
+flags: 0x4000(16384)
+	bit 1(DF): 1 bit 2(MF): 0
+time to live: 255
+protocol: 1
+checksum: 14847(unverified)
+source: 10.0.2.1
+destination: 10.0.2.15
+options(0 bytes):
+NONE FOUND
+ . . . . . . . . . . 
+[ICMPv4]:
+type: 0
+code: 0
+checksum: 19186(verified)
+id: 16297 sequence: 1
+data(56 bytes):
+
+a
+ . . . . . . . . . . 
