@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     }
 
     PacketCraft::IPv6PingPacket pingPacket;
-    pingPacket.Create(myMAC, "52:54:00:12:35:00", myIP, "::1", PingType::ECHO_REQUEST);
+    pingPacket.Create(myMAC, "00:00:00:00:00:00", myIP, "::1", PingType::ECHO_REQUEST);
 
     char buffer[1000]{};
     ICMPv6Header* icmpv6Header = (ICMPv6Header*)pingPacket.GetLayerStart(2);

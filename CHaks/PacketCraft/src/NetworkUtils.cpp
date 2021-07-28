@@ -1285,7 +1285,8 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
     int newLineAt = 15;
     for(unsigned int i = 0; i < icmpv6DataSize; ++i)
     {
-        *dataPtr++ = icmpv6Header->data[i];
+        *dataPtr++ = (char)icmpv6Header->data[i];
+        // std::cout << "data pointer: " << (uint16_t)icmpv6Header->data[i] << "\n";
         if(i % newLineAt == 0)
         {
             *dataPtr++ = '\n';
@@ -1308,5 +1309,6 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
 
 int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize)
 {
+
     return NO_ERROR;
 }

@@ -1,0 +1,23 @@
+[ETHERNET]:
+destination: 0:0:0:0:0:0
+source: 0:0:0:0:0:0
+type: 0x86dd(34525)
+. . . . . . . . . . 
+[IPv6]:
+version: 6
+traffic class: 0x0(dscp: 0 ecn: 0)
+flow label: 0xe4c9
+payload length: 64
+next header: 58
+hop limit: 64
+source: ::1
+destination: ::1
+ . . . . . . . . . . 
+[ICMPv6]:
+type: 128
+code: 0
+checksum: 12122
+data:
+:
+ó
+ . . . . . . . . . . 
