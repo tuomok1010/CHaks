@@ -1247,18 +1247,24 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
 {
     const char* icmpv4ChecksumVerified = VerifyChecksum(icmpv4Header, sizeof(ICMPv4Header) + icmpv4DataSize) == TRUE ? "verified" : "unverified";
 
-    char data[icmpv4DataSize]{};
+    char data[PC_ICMPV4_MAX_DATA_STR_SIZE]{};
     char* dataPtr = data;
+    uint32_t newLineAt = 15;
 
     // TODO: test/improve data printing
     for(unsigned int i = 0; i < icmpv4DataSize; ++i)
     {
-        *dataPtr++ = (uint16_t)icmpv4Header->data[i];
-        // std::cout << "data char: " << (uint16_t)icmpv4Header->data[i];
+        int len = snprintf(NULL, 0, "%x ", (uint16_t)icmpv4Header->data[i]);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv4Header->data[i]);
+        dataPtr += len;
 
-        uint16_t dataByte = (uint16_t)icmpv4Header->data[i];
-        std::cout << dataByte;
+        if(i % newLineAt == 0)
+        {
+            *dataPtr++ = '\n';
+        }
     }
+
+    *dataPtr = '\0';
 
     int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
     (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, ntohs(icmpv4Header->un.echo.id),
