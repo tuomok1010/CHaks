@@ -1173,18 +1173,23 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
     bool32 hasIpv4Options = ipv4Header->ip_hl > 5 ? TRUE : FALSE;
     uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
 
-    char options[ipv4OptionsSize]{};
+    char options[PC_IPV4_MAX_OPTIONS_STR_SIZE]{};
     char* optionsPtr = options;
+    uint32_t newLineAt = 15;
 
-    int newLineAt = 15;
     for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
     {
-        *optionsPtr++ = ipv4Header->options[i];
+        int len = snprintf(NULL, 0, "%x ", (uint16_t)ipv4Header->options[i]);
+        snprintf(optionsPtr, len + 1, "%x ", (uint16_t)ipv4Header->options[i]);
+        optionsPtr += len;
+
         if(i % newLineAt == 0)
         {
             *optionsPtr++ = '\n';
         }
     }
+
+    *optionsPtr = '\0';
 
     int res = snprintf(buffer, bufferSize, "[IPv4]:\nip version: %u\nheader length: %u\nToS: 0x%x\ntotal length: %u\nidentification: %u\n\
 flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u(%s)\nsource: %s\ndestination: %s\noptions(%u bytes):\n%s\n\
@@ -1283,20 +1288,24 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
 
 int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize)
 {
-    char data[icmpv6DataSize]{};
+    char data[PC_ICMPV6_MAX_DATA_STR_SIZE]{};
     char* dataPtr = data;
+    uint32_t newLineAt = 15;
 
     // TODO: test/improve data printing
-    int newLineAt = 15;
     for(unsigned int i = 0; i < icmpv6DataSize; ++i)
     {
-        *dataPtr++ = (char)icmpv6Header->data[i];
-        // std::cout << "data pointer: " << (uint16_t)icmpv6Header->data[i] << "\n";
+        int len = snprintf(NULL, 0, "%x ", (uint16_t)icmpv6Header->data[i]);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv6Header->data[i]);
+        dataPtr += len;
+
         if(i % newLineAt == 0)
         {
             *dataPtr++ = '\n';
         }
     }
+
+    *dataPtr = '\0';
 
     int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
     (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (uint32_t)icmpv6DataSize, 

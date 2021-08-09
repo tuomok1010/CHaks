@@ -10,7 +10,9 @@
 // NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
 #define PC_PROTO_ETH    UINT16_MAX
 
-#define PC_ICMPV4_MAX_DATA_STR_SIZE 500
+#define PC_ICMPV4_MAX_DATA_STR_SIZE     500
+#define PC_IPV4_MAX_OPTIONS_STR_SIZE    500
+#define PC_ICMPV6_MAX_DATA_STR_SIZE     500
 
 // PacketCraft::Packet layer types
 // NOTE: if you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
