@@ -1254,7 +1254,10 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
     for(unsigned int i = 0; i < icmpv4DataSize; ++i)
     {
         *dataPtr++ = (uint16_t)icmpv4Header->data[i];
-        std::cout << "data char: " << (uint16_t)icmpv4Header->data[i];
+        // std::cout << "data char: " << (uint16_t)icmpv4Header->data[i];
+
+        uint16_t dataByte = (uint16_t)icmpv4Header->data[i];
+        std::cout << dataByte;
     }
 
     int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
