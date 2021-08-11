@@ -39,9 +39,9 @@ namespace CHaks
         void CloseSocket();
         bool32 IsProtocolSupported(const char* protocol) const;
         bool32 IsProtocolSupported(uint32_t protocol) const;
-        int SavePacketToFile(const PacketCraft::Packet& packet);
+        int GetFullFilePath(const PacketCraft::Packet& packet, char* fullPathBuffer);
 
-        char savePath[PATH_MAX_SIZE];
+        char savePath[PATH_MAX_SIZE]; // this the filepath where the packet is to be saved. Will be initialized in Init()
         unsigned long long packetNumber;
     };
 }

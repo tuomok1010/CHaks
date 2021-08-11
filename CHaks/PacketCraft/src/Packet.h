@@ -41,7 +41,11 @@ namespace PacketCraft
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
         void ResetPacketBuffer();
-        int Print(uint32_t layerSize = 0, unsigned short protocol = PC_PROTO_ETH, uint32_t layerToPrintIndex = 0);
+
+        // NOTE: this is the old print function that can only print the packet to console
+        // int Print(uint32_t layerSize = 0, unsigned short protocol = PC_PROTO_ETH, uint32_t layerToPrintIndex = 0);
+
+        int Print(bool32 printToFile = FALSE, const char* fullFilePath = "") const; // if printToFile is true, prints the packet into a txt file, otherwise prints it in console
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;
