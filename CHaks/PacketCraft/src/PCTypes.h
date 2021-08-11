@@ -13,6 +13,8 @@
 #define PC_ICMPV4_MAX_DATA_STR_SIZE     500
 #define PC_IPV4_MAX_OPTIONS_STR_SIZE    500
 #define PC_ICMPV6_MAX_DATA_STR_SIZE     500
+#define PC_TCP_MAX_OPTIONS_STR_SIZE     500
+#define PC_TCP_MAX_DATA_STR_SIZE        1000
 
 // PacketCraft::Packet layer types
 // NOTE: if you add new ones, remember to update the networkProtocols variable in NetworkUtils.h

@@ -1183,7 +1183,7 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
         snprintf(optionsPtr, len + 1, "%x ", (uint16_t)ipv4Header->options[i]);
         optionsPtr += len;
 
-        if(i % newLineAt == 0)
+        if(i % newLineAt == 0 && i != 0)
         {
             *optionsPtr++ = '\n';
         }
@@ -1263,7 +1263,7 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
         snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv4Header->data[i]);
         dataPtr += len;
 
-        if(i % newLineAt == 0)
+        if(i % newLineAt == 0 && i != 0)
         {
             *dataPtr++ = '\n';
         }
@@ -1299,7 +1299,7 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
         snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv6Header->data[i]);
         dataPtr += len;
 
-        if(i % newLineAt == 0)
+        if(i % newLineAt == 0 && i != 0)
         {
             *dataPtr++ = '\n';
         }
@@ -1324,6 +1324,74 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
 
 int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize)
 {
+    char options[PC_TCP_MAX_OPTIONS_STR_SIZE]{};
+    char* optionsStrPtr = options;
+
+    uint8_t* optionsAndDataPtr = tcpHeader->optionsAndData;
+    int newLineAt = 15;
+
+    bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
+
+    // options field is present, TODO: verify!
+    if(hasOptions)
+    {
+        uint16_t optionKind = (uint16_t)*optionsAndDataPtr++;
+        uint16_t optionLength = (uint16_t)*optionsAndDataPtr++;
+
+        int len = snprintf(NULL, 0, "option kind: %u\noptions length: %u\n", optionKind, optionLength);
+        snprintf(optionsStrPtr, len + 1, "option kind: %u\noptions length: %u\noptions data:\n", optionKind, optionLength);
+        optionsStrPtr += len;
+
+        for(int i = 0; i < optionLength - 2; ++i)
+        {
+            len = snprintf(NULL, 0, "%x ", (uint16_t)*optionsAndDataPtr);
+            snprintf(optionsStrPtr, len + 1, "%x ", (uint16_t)*optionsAndDataPtr);
+            ++optionsAndDataPtr;
+            optionsStrPtr += len;
+
+            if(i % newLineAt == 0 && i != 0)
+            {
+                *optionsStrPtr++ = '\n';
+            }
+        }
+
+        *optionsStrPtr = '\0';
+    }
+
+    
+    char data[PC_TCP_MAX_DATA_STR_SIZE]{};
+    char* dataPtr = data;
+
+    for(unsigned int i = 0; i < tcpDataSize; ++i)
+    {
+        int len = snprintf(NULL, 0, "%x ", (uint16_t)*optionsAndDataPtr);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)*optionsAndDataPtr);
+        ++optionsAndDataPtr;
+        dataPtr += len;
+
+        if(i % newLineAt == 0 && i != 0)
+        {
+            *dataPtr++ = '\n';
+        }
+    }
+
+    *dataPtr = '\0';
+
+    int res = snprintf(buffer, bufferSize, "[TCP]:\nsource port: %u destination port: %u\nsequence number: %u\nacknowledgement number: %u\n\
+data offset: %u\nflags: 0x%x\nFIN(%u), SYN(%u), RST(%u), PSH(%u), ACK(%u), URG(%u)\nwindow size: %u\nchecksum: %u\nurgent pointer: %u\n\
+options:\n%s\ndata:\n%s\n", ntohs(tcpHeader->source), ntohs(tcpHeader->dest), ntohl(tcpHeader->seq), ntohl(tcpHeader->ack_seq), tcpHeader->doff,
+(uint16_t)tcpHeader->th_flags, tcpHeader->fin, tcpHeader->syn, tcpHeader->rst, tcpHeader->psh, tcpHeader->ack, tcpHeader->urg, ntohs(tcpHeader->window),
+ntohs(tcpHeader->check), ntohs(tcpHeader->urg_ptr), (hasOptions == TRUE ? options : "NONE FOUND\n"), (tcpDataSize > 0 ? data : "NONE FOUND\n . . . . . . . . . . \n"));
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
 
     return NO_ERROR;
 }
