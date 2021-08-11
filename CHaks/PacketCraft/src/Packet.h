@@ -45,7 +45,8 @@ namespace PacketCraft
         // NOTE: this is the old print function that can only print the packet to console
         // int Print(uint32_t layerSize = 0, unsigned short protocol = PC_PROTO_ETH, uint32_t layerToPrintIndex = 0);
 
-        int Print(bool32 printToFile = FALSE, const char* fullFilePath = "") const; // if printToFile is true, prints the packet into a txt file, otherwise prints it in console
+        // if printToFile is true, prints the packet into a txt file in fullFilePath, otherwise prints it in console
+        int Print(bool32 printToFile = FALSE, const char* fullFilePath = "") const;
 
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;

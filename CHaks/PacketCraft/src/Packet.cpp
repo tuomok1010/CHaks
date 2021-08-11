@@ -194,6 +194,7 @@ void PacketCraft::Packet::ResetPacketBuffer()
     }
 }
 
+// NOTE: this is the old print function that can only print the packet to console
 /*
 int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint32_t layerToPrintIndex)
 {
