@@ -1192,11 +1192,11 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
     *optionsPtr = '\0';
 
     int res = snprintf(buffer, bufferSize, "[IPv4]:\nip version: %u\nheader length: %u\nToS: 0x%x\ntotal length: %u\nidentification: %u\n\
-flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u(%s)\nsource: %s\ndestination: %s\noptions(%u bytes):\n%s\n\
- . . . . . . . . . . \n",
+flags: 0x%x(%u)\n\tbit 1(DF): %d bit 2(MF): %d\ntime to live: %u\nprotocol: %u\nchecksum: %u, 0x%x(%s)\nsource: %s\ndestination: %s\n\
+[options](%u bytes):\n%s\n . . . . . . . . . . \n",
 ipv4Header->ip_v, ipv4Header->ip_hl, (uint16_t)ipv4Header->ip_tos, ntohs(ipv4Header->ip_len), ntohs(ipv4Header->ip_id), ntohs(ipv4Header->ip_off), 
-ntohs(ipv4Header->ip_off), flagDFSet, flagMFSet, (uint16_t)ipv4Header->ip_ttl, (uint16_t)ipv4Header->ip_p, ntohs(ipv4Header->ip_sum), ipv4ChecksumVerified,
-srcIPStr, dstIPStr, (uint32_t)ipv4OptionsSize, (hasIpv4Options == TRUE ? options : "NONE FOUND"));
+ntohs(ipv4Header->ip_off), flagDFSet, flagMFSet, (uint16_t)ipv4Header->ip_ttl, (uint16_t)ipv4Header->ip_p, ntohs(ipv4Header->ip_sum), ntohs(ipv4Header->ip_sum),
+ipv4ChecksumVerified, srcIPStr, dstIPStr, (uint32_t)ipv4OptionsSize, (hasIpv4Options == TRUE ? options : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {
@@ -1271,7 +1271,7 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
 
     *dataPtr = '\0';
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
+    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
     (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, ntohs(icmpv4Header->un.echo.id),
     ntohs(icmpv4Header->un.echo.sequence), (uint32_t)icmpv4DataSize, (icmpv4DataSize > 0 ? data : "NONE FOUND"));
 
@@ -1307,7 +1307,7 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
 
     *dataPtr = '\0';
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\ndata(%u bytes):\n%s\n . . . . . . . . . . \n",
+    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
     (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (uint32_t)icmpv6DataSize, 
     (icmpv6DataSize > 0 ? data : "NONE FOUND"));
 
@@ -1331,21 +1331,21 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
     int newLineAt = 15;
 
     bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
+    uint32_t optionsTotalLength = (tcpHeader->doff * 32 / 8) - sizeof(TCPHeader);
 
-    // options field is present, TODO: verify!
     if(hasOptions)
     {
         uint16_t optionKind = (uint16_t)*optionsAndDataPtr++;
         uint16_t optionLength = (uint16_t)*optionsAndDataPtr++;
 
-        int len = snprintf(NULL, 0, "option kind: %u\noptions length: %u\n", optionKind, optionLength);
-        snprintf(optionsStrPtr, len + 1, "option kind: %u\noptions length: %u\noptions data:\n", optionKind, optionLength);
+        int len = snprintf(NULL, 0, "option kind: %u\noption length: %u\n", optionKind, optionLength);
+        snprintf(optionsStrPtr, len + 1, "option kind: %u\noption length: %u\n", optionKind, optionLength);
         optionsStrPtr += len;
 
-        for(int i = 0; i < optionLength - 2; ++i)
+        for(unsigned int i = 0; i < optionsTotalLength - 2; ++i)
         {
-            len = snprintf(NULL, 0, "%x ", (uint16_t)*optionsAndDataPtr);
-            snprintf(optionsStrPtr, len + 1, "%x ", (uint16_t)*optionsAndDataPtr);
+            len = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
+            snprintf(optionsStrPtr, len + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
             ++optionsAndDataPtr;
             optionsStrPtr += len;
 
@@ -1358,16 +1358,23 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
         *optionsStrPtr = '\0';
     }
 
-    
+    // TODO: is there a way to do this with a single buffer?
     char data[PC_TCP_MAX_DATA_STR_SIZE]{};
+    char dataAsChars[PC_TCP_MAX_DATA_STR_SIZE]{};
     char* dataPtr = data;
+    char* dataAsCharsPtr = dataAsChars;
 
     for(unsigned int i = 0; i < tcpDataSize; ++i)
     {
-        int len = snprintf(NULL, 0, "%x ", (uint16_t)*optionsAndDataPtr);
-        snprintf(dataPtr, len + 1, "%x ", (uint16_t)*optionsAndDataPtr);
+        int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
+        snprintf(dataPtr, dataLen + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
+
+        int dataAsCharsLen = snprintf(NULL, 0, "%c ", (unsigned char)*optionsAndDataPtr);
+        snprintf(dataAsCharsPtr, dataAsCharsLen + 1, "%c ", (unsigned char)*optionsAndDataPtr);
+
         ++optionsAndDataPtr;
-        dataPtr += len;
+        dataPtr += dataLen;
+        dataAsCharsPtr += dataAsCharsLen;
 
         if(i % newLineAt == 0 && i != 0)
         {
@@ -1376,12 +1383,14 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
     }
 
     *dataPtr = '\0';
+    *dataAsCharsPtr = '\0';
 
     int res = snprintf(buffer, bufferSize, "[TCP]:\nsource port: %u destination port: %u\nsequence number: %u\nacknowledgement number: %u\n\
 data offset: %u\nflags: 0x%x\nFIN(%u), SYN(%u), RST(%u), PSH(%u), ACK(%u), URG(%u)\nwindow size: %u\nchecksum: %u\nurgent pointer: %u\n\
-options:\n%s\ndata:\n%s\n", ntohs(tcpHeader->source), ntohs(tcpHeader->dest), ntohl(tcpHeader->seq), ntohl(tcpHeader->ack_seq), tcpHeader->doff,
-(uint16_t)tcpHeader->th_flags, tcpHeader->fin, tcpHeader->syn, tcpHeader->rst, tcpHeader->psh, tcpHeader->ack, tcpHeader->urg, ntohs(tcpHeader->window),
-ntohs(tcpHeader->check), ntohs(tcpHeader->urg_ptr), (hasOptions == TRUE ? options : "NONE FOUND\n"), (tcpDataSize > 0 ? data : "NONE FOUND\n . . . . . . . . . . \n"));
+[options](%u bytes):\n%s\n[data]:\n%s\n[data as chars]:\n%s\n . . . . . . . . . . \n", ntohs(tcpHeader->source), ntohs(tcpHeader->dest), ntohl(tcpHeader->seq), 
+ntohl(tcpHeader->ack_seq), tcpHeader->doff, (uint16_t)tcpHeader->th_flags, tcpHeader->fin, tcpHeader->syn, tcpHeader->rst, tcpHeader->psh, tcpHeader->ack, 
+tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHeader->urg_ptr), optionsTotalLength, 
+(hasOptions == TRUE ? options : "NONE FOUND\n"), (tcpDataSize > 0 ? data : "NONE FOUND\n"), (tcpDataSize > 0 ? dataAsChars : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {

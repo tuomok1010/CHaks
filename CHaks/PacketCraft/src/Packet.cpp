@@ -335,7 +335,7 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 PacketCraft::ConvertIPv6LayerToString(buffer, bufferSize, ipv6Header);
                 uint32_t nextProtocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 
-                if(nextProtocol == IPPROTO_ICMPV6)
+                if(nextProtocol == IPPROTO_ICMPV6 || nextProtocol == IPPROTO_TCP)
                     layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
 
                 if(printToFile == TRUE)
@@ -372,11 +372,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_TCP:
             {
                 TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(i);
-
-                if(tcpHeader->doff > 5)
-                    PacketCraft::ConvertTCPLayerToString(buffer, bufferSize, tcpHeader, layerSize - sizeof(TCPHeader) - (uint32_t)*tcpHeader->optionsAndData + 1);
-                else
-                    PacketCraft::ConvertTCPLayerToString(buffer, bufferSize, tcpHeader, layerSize - sizeof(TCPHeader));
+                uint32_t tcpDataSize = layerSize - (tcpHeader->doff * 32 / 8);
+                PacketCraft::ConvertTCPLayerToString(buffer, bufferSize, tcpHeader, tcpDataSize);
              
                 if(printToFile == TRUE)
                     file.write(buffer, PacketCraft::GetStrLen(buffer));
