@@ -10,22 +10,47 @@
 // NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
 #define PC_PROTO_ETH    UINT16_MAX
 
+// these ase used when allocating buffers for converting packet layers to strings
+#define PC_ETH_MAX_STR_SIZE             500
+#define PC_ARP_MAX_STR_SIZE             500
+#define PC_IPV4_MAX_STR_SIZE            1000
+#define PC_IPV6_MAX_STR_SIZE            500
+#define PC_ICMPV4_MAX_STR_SIZE          1000
+#define PC_ICMPV6_MAX_STR_SIZE          1000
+#define PC_TCP_MAX_STR_SIZE             5000
+
 #define PC_ICMPV4_MAX_DATA_STR_SIZE     500
 #define PC_IPV4_MAX_OPTIONS_STR_SIZE    500
 #define PC_ICMPV6_MAX_DATA_STR_SIZE     500
 #define PC_TCP_MAX_OPTIONS_STR_SIZE     500
-#define PC_TCP_MAX_DATA_STR_SIZE        1000
+#define PC_TCP_MAX_DATA_STR_SIZE        2000
 
-// PacketCraft::Packet layer types
-// NOTE: if you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
+#define PC_PACKET_MAX_STR_SIZE          10'000
+////////////////////////////////////////////////////
+
+
+
+/*
+    NOTE: PacketCraft::Packet layer types. These are the link/internet/transport layers that PacketCraft supports.
+    If you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
+*/
+// Supported link/internet layer protocols
 #define PC_NONE             0x0000
 #define PC_ETHER_II         0x0001
 #define PC_ARP              0x0002
 #define PC_IPV4             0x0003
 #define PC_IPV6             0x0004
+
+// Supported payload protocols
 #define PC_ICMPV4           0x0005
 #define PC_ICMPV6           0x0006
 #define PC_TCP              0x0007
+
+// Supported application layer protocols. Used in NetworkUtils.h GetApplicationLayerProtocol()
+#define PC_HTTP             0x0008
+/////////////////////////////////////////////////////
+
+
 
 #define PC_MAX_LAYERS       10
 

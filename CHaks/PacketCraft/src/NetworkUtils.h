@@ -15,11 +15,14 @@ namespace PacketCraft
         {PC_IPV6, "IPV6"},
         {PC_ICMPV4, "ICMPV4"},
         {PC_ICMPV6, "ICMPV6"},
-        {PC_TCP, "TCP"}
+        {PC_TCP, "TCP"},
+        {PC_HTTP, "HTTP"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);
     uint32_t ProtoStrToUint32(const char* protocol);
+
+    uint32_t GetApplicationLayerProtocol(void* payloadData);
 
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);
@@ -63,26 +66,12 @@ namespace PacketCraft
     uint32_t CalculateICMPv6DataSize(IPv6Header* ipv6Header, ICMPv6Header* icmpv6Header);
 
     // TODO: check all the checksum calculation/verifications and make sure they work!
-    // TODO: Make only one checksum function and assemble the pseudoheaders etc outside 
     uint16_t CalculateChecksum(void* data, size_t sizeInBytes);
     bool32 VerifyChecksum(void* data, size_t sizeInBytes);
+    //////////////////////////////////////////////////////////////////////////////////////
 
-// old checksum functions
-/*
-    uint16_t CalculateIPv4Checksum(void* ipv4Header, size_t ipv4HeaderAndOptionsSizeInBytes);
-    bool32 VerifyIPv4Checksum(void* ipv4Header, size_t ipv4HeaderSizeInBytes);
 
-    uint16_t CalculateICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes);
-    bool32 VerifyICMPv4Checksum(void* icmpv4Header, size_t icmpvHeaderAndDataSizeInBytes);
-
-    uint16_t CalculateICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
-    bool32 VerifyICMPv6Checksum(void* ipv6Header, void* icmpv6Header, size_t icmpv6HeaderAndDataSizeInBytes);
-
-    uint16_t CalculateTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
-    bool32 VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_t tcpHeaderAndDataSizeInBytes);
-*/
-    ////////////////////////
-
+    // Print/Convert to string functions
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
     int PrintIPAddr(const sockaddr_in& addr, const char* prefix = "", const char* suffix = "");
     int PrintIPAddr(const sockaddr_in6& addr, const char* prefix = "", const char* suffix = "");
@@ -105,6 +94,7 @@ namespace PacketCraft
     int ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICMPv4Header* icmpv4Header, size_t icmpv4DataSize = 0);
     int ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize = 0);
     int ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize = 0);
+    //////////////////////////////////////////////////////////////////////////////////////
 
 }
 

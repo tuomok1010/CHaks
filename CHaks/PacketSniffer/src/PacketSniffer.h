@@ -18,7 +18,8 @@ namespace CHaks
         {"IPV6", PC_IPV6},
         {"ICMPV4", PC_ICMPV4},
         {"ICMPV6", PC_ICMPV6},
-        {"TCP", PC_TCP}
+        {"TCP", PC_TCP},
+        {"HTTP", PC_HTTP}
     };
 
     class PacketSniffer

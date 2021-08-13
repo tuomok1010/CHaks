@@ -176,6 +176,8 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
         }
     }
 
+    // TODO: check the application layer protocol and see if it is supported, (use Networkutils GetApplicationLayerProtocol)
+
     if(isValid == TRUE)
     {
         if(saveToFile == TRUE)

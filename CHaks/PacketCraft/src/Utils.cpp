@@ -21,6 +21,16 @@ void PacketCraft::CopyStr(char* dest, size_t destSize, const char* src)
     }
 }
 
+void PacketCraft::CopyUntil(char* dst, size_t destSize, const char* src, const char delimiter)
+{
+    for(size_t i = 0; i < destSize; ++i)
+    {
+        dst[i] = src[i];
+        if(src[i] == '\0' || src[i] == delimiter)
+            break;
+    }
+}
+
 bool32 PacketCraft::CompareStr(const char* str1, const char* str2)
 {
     while((*str1++ == *str2++))
@@ -32,7 +42,6 @@ bool32 PacketCraft::CompareStr(const char* str1, const char* str2)
     return FALSE;
 }
 
-// If pattern string is found in str, returns the index. If it is not found returns -1
 int PacketCraft::FindInStr(const char* str, const char* pattern)
 {
     int foundIndex{};

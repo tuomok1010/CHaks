@@ -14,10 +14,21 @@
 namespace PacketCraft
 {
     // String utils
+
+    // returns the number of characters in str, excluding the null terminating character
     int GetStrLen(const char* str);
+
     void CopyStr(char* dest, size_t destSize, const char* src);
+
+    // copies characters from src to dst until a delimiter character in src is found, if no delimiter is found it copies the entire string
+    void CopyUntil(char* dst, size_t destSize, const char* src, const char delimiter);
+    ////////////////
+
     bool32 CompareStr(const char* str1, const char* str2);
+
+    // If pattern string is found in str, returns the index. If it is not found returns -1
     int FindInStr(const char* str, const char* pattern);
+
 
     // Debug utils
     void PrintError(const int errorCode, const char* func, const char* msg);
