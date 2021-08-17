@@ -9,6 +9,7 @@ namespace PacketCraft
 {
     const static std::unordered_map<uint32_t, const char*> networkProtocols
     {
+        {PC_NONE, "NONE"},
         {PC_ETHER_II, "ETHERNET"},
         {PC_ARP, "ARP"},
         {PC_IPV4, "IPV4"},
@@ -22,7 +23,7 @@ namespace PacketCraft
     const char* ProtoUint32ToStr(uint32_t protocol);
     uint32_t ProtoStrToUint32(const char* protocol);
 
-    uint32_t GetApplicationLayerProtocol(void* payloadData);
+    uint32_t GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize);
 
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);

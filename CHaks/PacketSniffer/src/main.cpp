@@ -61,6 +61,23 @@ int main(int argc, char** argv)
     char interfaceName[IFNAMSIZ]{};
     CHaks::PacketSniffer packetSniffer;
 
+/*
+    const char* str1 = "this is a test HTTP/1.1 thing";
+    const char* pattern  = "HTTP";
+
+    int resultIndex = PacketCraft::FindInStr(str1, pattern);
+    if(resultIndex > -1)
+    {
+        std::cout << "pattern found at " << resultIndex << std::endl;
+    }
+    else
+    {
+        std::cout << "pattern not found" << std::endl;
+    }
+
+    return 0;
+*/
+
     if(ProcessArgs(argc, argv, interfaceName, packetSniffer) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");

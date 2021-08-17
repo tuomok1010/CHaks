@@ -173,10 +173,29 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
             {
                 isValid = TRUE;
             }
+
+            // check the tcp payload data protocol
+            if(PacketCraft::CompareStr(packetProtocolStr, "TCP") == TRUE)
+            {
+                TCPHeader* tcpHeader = (TCPHeader*)packet.GetLayerStart(i);
+
+                if(tcpHeader->doff > 5) // check if header has options and possibly data
+                {
+                    uint32_t tcpDataSize = packet.GetLayerSize(i) - (tcpHeader->doff * 32 / 8);
+                    std::cout << "tcp total payload size if " << packet.GetLayerSize(i) << std::endl;
+                    std::cout << "tcp data offset is " << (tcpHeader->doff * 32 / 8) << std::endl;
+                    std::cout << "tcpDataSize is " << tcpDataSize << std::endl;
+                    const char* tcpDataProtoStr = PacketCraft::ProtoUint32ToStr(PacketCraft::GetTCPDataProtocol(tcpHeader, tcpDataSize));
+                    std::cout << "tcpDataProtoStr is " << tcpDataProtoStr << std::endl;
+
+                    if(PacketCraft::CompareStr(tcpDataProtoStr, protocolsSupplied[j]) == TRUE)
+                    {
+                        isValid = TRUE;
+                    }
+                }
+            }
         }
     }
-
-    // TODO: check the application layer protocol and see if it is supported, (use Networkutils GetApplicationLayerProtocol)
 
     if(isValid == TRUE)
     {

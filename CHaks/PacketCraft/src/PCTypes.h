@@ -79,6 +79,7 @@ struct sockaddr;
 struct EthHeader;
 struct ARPHeader;
 struct IPv4Header;
+struct IPv4OptionsHeader;
 struct IPv6Header;
 struct ICMPv4Header;
 struct ICMPv6Header;

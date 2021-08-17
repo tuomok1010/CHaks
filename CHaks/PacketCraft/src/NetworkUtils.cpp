@@ -29,17 +29,23 @@ uint32_t PacketCraft::ProtoStrToUint32(const char* protocol)
     return PC_NONE;
 }
 
-uint32_t PacketCraft::GetApplicationLayerProtocol(void* payloadData)
+uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
 {
+    if(dataSize <= 0)
+        return PC_NONE;
+
     // check for HTTP
-    char buffer[500]{};
-    CopyUntil(buffer, 500, (char*)payloadData, '\n');
+    char* buffer = (char*)malloc(dataSize);
+    CopyUntil(buffer, dataSize, (char*)tcpHeader + (tcpHeader->doff * 32 / 8), '\n');
     int res = FindInStr(buffer, "HTTP");
-    if(res != 0)
+    if(res != -1)
+    {
+        free(buffer);
         return PC_HTTP;
+    }
     /////////////////
 
-    
+    free(buffer);
     return PC_NONE;
 }
 

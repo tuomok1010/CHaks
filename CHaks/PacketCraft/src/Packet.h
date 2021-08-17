@@ -51,6 +51,7 @@ namespace PacketCraft
         void* GetLayerStart(const uint32_t layerIndex) const;
         void* GetLayerEnd(const uint32_t layerIndex) const;
         uint32_t GetLayerType(const uint32_t layerIndex) const;
+        uint32_t GetLayerSize(const uint32_t layerIndex) const;
 
         inline void* GetData() const { return data; }
         inline void* Start() const { return start; }

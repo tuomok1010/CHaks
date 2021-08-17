@@ -531,3 +531,8 @@ uint32_t PacketCraft::Packet::GetLayerType(const uint32_t layerIndex) const
 {
     return layerInfos[layerIndex].type;
 }
+
+uint32_t PacketCraft::Packet::GetLayerSize(const uint32_t layerIndex) const
+{
+    return layerInfos[layerIndex].sizeInBytes;
+}

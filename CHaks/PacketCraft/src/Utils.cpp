@@ -33,10 +33,13 @@ void PacketCraft::CopyUntil(char* dst, size_t destSize, const char* src, const c
 
 bool32 PacketCraft::CompareStr(const char* str1, const char* str2)
 {
-    while((*str1++ == *str2++))
+    while((*str1 == *str2))
     {
         if(*str1 == '\0')
             return TRUE;
+
+        ++str1;
+        ++str2;
     }
 
     return FALSE;
@@ -50,12 +53,15 @@ int PacketCraft::FindInStr(const char* str, const char* pattern)
         const char* c1 = str;
         const char* c2 = pattern;
 
-        while(*c1++ == *c2++)
+        while(*c1 == *c2)
         {
             if(*c2 == '\0')
             {
                 return foundIndex;
             }
+
+            ++c1;
+            ++c2;
         }
         ++str;
         ++foundIndex;

@@ -46,7 +46,17 @@ struct __attribute__((__packed__)) IPv4Header
     uint8_t ip_p;			        /* protocol */
     unsigned short ip_sum;		    /* checksum */
     struct in_addr ip_src, ip_dst;	/* source and dest address */
-    uint8_t options[];              /* optional options field, NOTE: when doing sizeof() this struct, this will not count (C magic)*/
+    uint8_t options[];              /* optional options field */
+};
+
+struct __attribute__((__packed__)) IPv4OptionsHeader
+{
+    uint8_t copied:1;
+    uint8_t opt_class:2;
+    uint8_t opt_num:5;
+
+    uint8_t opt_len;
+    uint8_t opt_data[];
 };
 
 struct __attribute__((__packed__)) IPv6Header
