@@ -38,6 +38,7 @@ uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
     char* buffer = (char*)malloc(dataSize);
     CopyUntil(buffer, dataSize, (char*)tcpHeader + (tcpHeader->doff * 32 / 8), '\n');
     int res = FindInStr(buffer, "HTTP");
+
     if(res != -1)
     {
         free(buffer);

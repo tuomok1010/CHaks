@@ -27,7 +27,10 @@ void PacketCraft::CopyUntil(char* dst, size_t destSize, const char* src, const c
     {
         dst[i] = src[i];
         if(src[i] == '\0' || src[i] == delimiter)
+        {
+            dst[i + 1] = '\0';
             break;
+        }
     }
 }
 
@@ -47,7 +50,7 @@ bool32 PacketCraft::CompareStr(const char* str1, const char* str2)
 
 int PacketCraft::FindInStr(const char* str, const char* pattern)
 {
-    int foundIndex{};
+    int foundIndex{0};
     while(*str != '\0')
     {
         const char* c1 = str;
@@ -55,13 +58,13 @@ int PacketCraft::FindInStr(const char* str, const char* pattern)
 
         while(*c1 == *c2)
         {
+            ++c1;
+            ++c2;
+
             if(*c2 == '\0')
             {
                 return foundIndex;
             }
-
-            ++c1;
-            ++c2;
         }
         ++str;
         ++foundIndex;
