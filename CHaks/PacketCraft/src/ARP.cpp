@@ -199,7 +199,7 @@ int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t laye
 {
     switch(protocol)
     {
-        case 0:
+        case PC_PROTO_ETH:
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(GetData(), packet, ETH_HLEN);

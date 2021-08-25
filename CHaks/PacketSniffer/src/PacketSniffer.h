@@ -19,6 +19,7 @@ namespace CHaks
         {"ICMPV4", PC_ICMPV4},
         {"ICMPV6", PC_ICMPV6},
         {"TCP", PC_TCP},
+        {"UDP", PC_UDP},
         {"HTTP", PC_HTTP}
     };
 

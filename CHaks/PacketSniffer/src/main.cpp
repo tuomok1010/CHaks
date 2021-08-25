@@ -17,7 +17,7 @@ void PrintHelp(char** argv)
    for(std::pair<const char*, uint32_t> e : CHaks::supportedProtocols)
         std::cout << e.first << " ";
 
-    std::cout << "\nExample: " << argv[0] << " eth0 " << "1" << "ARP " << "ICMPV4" << std::endl;
+    std::cout << "\nExample: " << argv[0] << " eth0 " << "1 " << "ARP " << "ICMPV4" << std::endl;
 }
 
 // TODO: make this more bulletproof

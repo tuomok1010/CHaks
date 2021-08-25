@@ -206,6 +206,8 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
                 LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Print() error!");
                 return APPLICATION_ERROR;
             }
+
+            std::cout << "packet saved to file (" << packet.GetSizeInBytes() << " bytes) [press enter to stop]" << std::endl;
         }
         else
         {

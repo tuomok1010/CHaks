@@ -17,13 +17,16 @@ namespace PacketCraft
         {PC_ICMPV4, "ICMPV4"},
         {PC_ICMPV6, "ICMPV6"},
         {PC_TCP, "TCP"},
+        {PC_UDP, "UDP"},
         {PC_HTTP, "HTTP"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);
     uint32_t ProtoStrToUint32(const char* protocol);
+    uint32_t NetworkProtoToPacketCraftProto(unsigned short networkProtocol);
 
     uint32_t GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize);
+    uint32_t GetUDPDataProtocol(UDPHeader* udpHeader);
 
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);
@@ -85,6 +88,7 @@ namespace PacketCraft
     int PrintICMPv4Layer(ICMPv4Header* icmpv4Header, size_t dataSize = 0);
     int PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize = 0);
     int PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize = 0);
+    int PrintUDPLayer(UDPHeader* udpLayer);
 
     void PrintLayerTypeStr(const uint32_t layerType, const char* prefix = "", const char* suffix = "");
 
@@ -95,6 +99,7 @@ namespace PacketCraft
     int ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICMPv4Header* icmpv4Header, size_t icmpv4DataSize = 0);
     int ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize = 0);
     int ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize = 0);
+    int ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader);
     //////////////////////////////////////////////////////////////////////////////////////
 
 }

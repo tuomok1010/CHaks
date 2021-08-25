@@ -29,6 +29,29 @@ uint32_t PacketCraft::ProtoStrToUint32(const char* protocol)
     return PC_NONE;
 }
 
+uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProtocol)
+{
+    switch(networkProtocol)
+    {
+        case ETH_P_ARP:
+            return PC_ARP;
+        case ETH_P_IP:
+            return PC_IPV4;
+        case ETH_P_IPV6:
+            return PC_IPV6;
+        case IPPROTO_ICMP:
+            return PC_ICMPV4;
+        case IPPROTO_ICMPV6:
+            return PC_ICMPV6;
+        case IPPROTO_TCP:
+            return PC_TCP;
+        case IPPROTO_UDP:
+            return PC_UDP;
+        default:
+            return PC_NONE;
+    }
+}
+
 uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
 {
     if(dataSize <= 0)
@@ -47,6 +70,11 @@ uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
     /////////////////
 
     free(buffer);
+    return PC_NONE;
+}
+
+uint32_t PacketCraft::GetUDPDataProtocol(UDPHeader* udpHeader)
+{
     return PC_NONE;
 }
 
@@ -896,10 +924,27 @@ int PacketCraft::PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize)
 int PacketCraft::PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize)
 {
     char* buffer = (char*)malloc(PC_TCP_MAX_STR_SIZE);
-    if(ConvertTCPLayerToString(buffer, PC_TCP_MAX_STR_SIZE, tcpHeader, dataSize)== APPLICATION_ERROR)
+    if(ConvertTCPLayerToString(buffer, PC_TCP_MAX_STR_SIZE, tcpHeader, dataSize) == APPLICATION_ERROR)
     {
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "ConvertEthLayerToString() error!");
+        return APPLICATION_ERROR;
+    }
+
+    std::cout << buffer << std::flush;
+
+    free(buffer);
+
+    return NO_ERROR;
+}
+
+int PacketCraft::PrintUDPLayer(UDPHeader* udpLayer)
+{
+    char* buffer = (char*)malloc(PC_UDP_MAX_STR_SIZE);
+    if(ConvertUDPLayerToString(buffer, PC_UDP_MAX_STR_SIZE, udpLayer) == APPLICATION_ERROR)
+    {
+        free(buffer);
+        LOG_ERROR(APPLICATION_ERROR, "ConvertUDPLayerToString() error!");
         return APPLICATION_ERROR;
     }
 
@@ -1248,4 +1293,42 @@ tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHead
     }
 
     return NO_ERROR;
+}
+
+int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader)
+{
+    uint32_t dataSize = udpHeader->len - sizeof(UDPHeader);
+    char data[PC_UDP_MAX_DATA_STR_SIZE]{};
+    char* dataPtr = data;
+    uint32_t newLineAt = 15;
+
+    bool32 hasData = dataSize > sizeof(UDPHeader) ? TRUE : FALSE;
+
+    for(unsigned int i = 0; i < dataSize; ++i)
+    {
+        int len = snprintf(NULL, 0, "%x ", (uint16_t)udpHeader->data[i]);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)udpHeader->data[i]);
+        dataPtr += len;
+
+        if(i != 0 && i % newLineAt == 0)
+        {
+            *dataPtr++ = '\n';
+        }
+    }
+
+    *dataPtr = '\0';
+
+    int res = snprintf(buffer, bufferSize, "[UDP]:\nsource port: %u\ndestination port: %u\nlength: %u\nchecksum: %u, %x\n\n[data](%u bytes):\n%s\n . . . . . . . . . . \n", 
+    ntohs(udpHeader->source), ntohs(udpHeader->dest), ntohs(udpHeader->len), ntohs(udpHeader->check), ntohs(udpHeader->check), dataSize, 
+    (hasData == TRUE ? data : "NONE FOUND\n"));
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
 }

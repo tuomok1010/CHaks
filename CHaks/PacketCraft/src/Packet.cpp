@@ -194,90 +194,10 @@ void PacketCraft::Packet::ResetPacketBuffer()
     }
 }
 
-// NOTE: this is the old print function that can only print the packet to console
-/*
-int PacketCraft::Packet::Print(uint32_t layerSize, unsigned short protocol, uint32_t layerToPrintIndex)
-{
-    switch(protocol)
-    {
-        case PC_PROTO_ETH:
-        {
-            EthHeader* ethHeader = (EthHeader*)GetLayerStart(layerToPrintIndex);
-            protocol = ntohs(ethHeader->ether_type);
-            PrintEthernetLayer(ethHeader);
-            ++layerToPrintIndex;
-            break;
-        }
-        case ETH_P_ARP:
-        {
-            ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(layerToPrintIndex);
-            PrintARPLayer(arpHeader);
-            return NO_ERROR;
-        }
-        case ETH_P_IP:
-        {
-            IPv4Header* ipHeader = (IPv4Header*)GetLayerStart(layerToPrintIndex);
-            protocol = ipHeader->ip_p;
-
-            // this is the next layer size
-            layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
-
-            PrintIPv4Layer(ipHeader);
-            ++layerToPrintIndex;
-            break;
-        }
-        case ETH_P_IPV6: // TODO: TEST!!!
-        {
-            IPv6Header* ipv6Header = (IPv6Header*)GetLayerStart(layerToPrintIndex);
-            protocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
-
-            if(protocol == IPPROTO_ICMPV6)
-                layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
-
-            PrintIPv6Layer(ipv6Header);
-            ++layerToPrintIndex;
-            break;
-        }
-        case IPPROTO_ICMP:
-        {
-            ICMPv4Header* icmpvHeader = (ICMPv4Header*)GetLayerStart(layerToPrintIndex);
-            PrintICMPv4Layer(icmpvHeader, layerSize - sizeof(ICMPv4Header));
-            return NO_ERROR;
-        }
-        case IPPROTO_ICMPV6:
-        {
-            ICMPv6Header* icmpv6Header = (ICMPv6Header*)GetLayerStart(layerToPrintIndex);
-            PrintICMPv6Layer(icmpv6Header, layerSize - sizeof(ICMPv6Header));
-            return NO_ERROR;
-        }
-        case IPPROTO_TCP: // TODO: TEST!!!
-        {
-            TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(layerToPrintIndex);
-            if(tcpHeader->doff > 5)
-            {
-                PrintTCPLayer(tcpHeader, layerSize - sizeof(TCPHeader) - (uint32_t)*tcpHeader->optionsAndData + 1);
-            }
-            else
-            {
-                PrintTCPLayer(tcpHeader, layerSize - sizeof(TCPHeader));
-            }
-            return NO_ERROR;
-        }
-        default:
-        {
-            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received!");
-            return APPLICATION_ERROR;
-        }
-    }
-
-    return Print(layerSize, protocol, layerToPrintIndex);
-}
-*/
-
 int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) const
 {
     std::ofstream file;
-    uint32_t bufferSize = 5000;
+    uint32_t bufferSize = 10'000;
     char* buffer = (char*)malloc(bufferSize);
 
     if(printToFile == TRUE)
@@ -382,6 +302,18 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 
                 break;
             }
+            case PC_UDP:
+            {
+                UDPHeader* udpHeader = (UDPHeader*)GetLayerStart(i);
+                PacketCraft::ConvertUDPLayerToString(buffer, bufferSize, udpHeader);
+
+                if(printToFile == TRUE)
+                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                else
+                    std::cout << buffer << std::endl;
+
+                break;
+            }
             default:
             {
                 if(file.is_open())
@@ -413,22 +345,22 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
         {
             AddLayer(PC_ETHER_II, ETH_HLEN);
             memcpy(data, packet, ETH_HLEN);
-            protocol = ntohs(((EthHeader*)packet)->ether_type);
+            protocol = NetworkProtoToPacketCraftProto(ntohs(((EthHeader*)packet)->ether_type));
             packet += ETH_HLEN;
             break;
         }
-        case ETH_P_ARP:
+        case PC_ARP:
         {
             AddLayer(PC_ARP, sizeof(ARPHeader));
             memcpy(GetLayerStart(nLayers - 1), packet, sizeof(ARPHeader));
             return NO_ERROR;
         }
-        case ETH_P_IP:
+        case PC_IPV4:
         {
             IPv4Header* ipHeader = (IPv4Header*)packet;
             AddLayer(PC_IPV4, ipHeader->ip_hl * 32 / 8);
             memcpy(GetLayerStart(nLayers - 1), packet, ipHeader->ip_hl * 32 / 8);
-            protocol = ipHeader->ip_p;
+            protocol = NetworkProtoToPacketCraftProto(ipHeader->ip_p);
 
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
@@ -441,20 +373,20 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
-        case ETH_P_IPV6: // TODO: TEST!!!
+        case PC_IPV6: // TODO: TEST!!!
         {
             IPv6Header* ipv6Header = (IPv6Header*)packet;
             AddLayer(PC_IPV6, sizeof(IPv6Header));
             memcpy(GetLayerStart(nLayers - 1), packet, sizeof(IPv6Header));
-            protocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+            protocol = NetworkProtoToPacketCraftProto(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt);
 
-            if(protocol == IPPROTO_ICMPV6 || protocol == IPPROTO_TCP)
+            if(protocol == PC_ICMPV6 || protocol == PC_TCP || protocol == PC_UDP)
                 layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
 
             packet += sizeof(IPv6Header);
             break;
         }
-        case IPPROTO_ICMP:
+        case PC_ICMPV4:
         {
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
@@ -465,7 +397,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             }
             return NO_ERROR;
         }
-        case IPPROTO_ICMPV6: // TODO: TEST!!!
+        case PC_ICMPV6: // TODO: TEST!!!
         {
             AddLayer(PC_ICMPV6, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
@@ -476,9 +408,16 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             }
             return NO_ERROR;
         }
-        case IPPROTO_TCP:
+        case PC_TCP:
         {
             AddLayer(PC_TCP, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+
+            return NO_ERROR;
+        }
+        case PC_UDP:
+        {
+            AddLayer(PC_UDP, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
 
             return NO_ERROR;

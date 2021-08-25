@@ -181,6 +181,16 @@ struct __attribute__((__packed__)) TCPHeader
     uint8_t optionsAndData[];
 };
 
+struct __attribute__((__packed__)) UDPHeader
+{
+    uint16_t source;      /* source port */
+    uint16_t dest;        /* destination port */
+    uint16_t len;         /* udp length */
+    uint16_t check;       /* udp checksum */
+
+    uint8_t data[];
+};
+
 struct __attribute__((__packed__)) TCPv4PseudoHeader
 {
     struct in_addr ip_src;  /* source address */
@@ -188,6 +198,15 @@ struct __attribute__((__packed__)) TCPv4PseudoHeader
     uint8_t zeroes;
     uint8_t proto;
     uint16_t tcpLen;
+};
+
+struct __attribute__((__packed__)) UDPv4PseudoHeader
+{
+    struct in_addr ip_src;  /* source address */
+    struct in_addr ip_dst;	/* dest address */
+    uint8_t zeroes;
+    uint8_t proto;
+    uint16_t udpLen;
 };
 
 #endif
