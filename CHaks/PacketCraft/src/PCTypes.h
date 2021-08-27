@@ -7,8 +7,7 @@
 #define IPV4_ALEN 4
 #define IPV6_ALEN 16
 
-// NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
-#define PC_PROTO_ETH    UINT16_MAX
+#define FQDN_MAX_STR_LEN                255
 
 // these ase used when allocating buffers for converting packet layers to strings
 #define PC_ETH_MAX_STR_SIZE             500
@@ -36,6 +35,10 @@
     NOTE: PacketCraft::Packet layer types. These are the link/internet/transport layers that PacketCraft supports.
     If you add new ones, remember to update the networkProtocols variable in NetworkUtils.h
 */
+
+// NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
+#define PC_PROTO_ETH        UINT16_MAX
+
 // Supported link/internet layer protocols
 #define PC_NONE             0x0000
 #define PC_ETHER_II         0x0001
@@ -71,6 +74,13 @@ enum class PingType
 {
     ECHO_REQUEST,
     ECHO_REPLY
+};
+
+enum class IPVersion
+{
+    NONE,
+    IPV4,
+    IPV6
 };
 
 struct ether_addr;

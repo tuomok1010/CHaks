@@ -9,6 +9,8 @@ namespace CHaks
         DNSSpoofer();
         ~DNSSpoofer();
 
+        int Spoof();
+
         private:
 
     };
