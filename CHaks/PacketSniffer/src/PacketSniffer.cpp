@@ -44,8 +44,6 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
         if(PacketCraft::CompareStr(protocolsSupplied[i], "") == TRUE)
             continue;
 
-        // std::cout << "verifying following protocol: " << protocolsSupplied[i] << "\n";
-
         if(IsProtocolSupported(protocolsSupplied[i]) == FALSE)
         {
             LOG_ERROR(APPLICATION_ERROR, "unsupported protocol supplied!");
@@ -201,6 +199,8 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
                 return APPLICATION_ERROR;
             }
 
+            std::cout << "full path is " << fullPath << std::endl;
+
             if(packet.Print(TRUE, fullPath) == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Print() error!");
@@ -237,6 +237,8 @@ int CHaks::PacketSniffer::GetFullFilePath(const PacketCraft::Packet& packet, cha
     char fileName[100]{};
     const char* packetNumStr = std::to_string(packetNumber).c_str();
     PacketCraft::CopyStr(fileName, sizeof(fileName), packetNumStr);
+
+    std::cout << "packet num is " << packetNumStr << std::endl;
 
     PacketCraft::CopyStr(fileName + PacketCraft::GetStrLen(packetNumStr), 1, "_");
     char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr) + 1;

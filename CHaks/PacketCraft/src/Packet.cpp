@@ -31,16 +31,11 @@ PacketCraft::Packet::Packet():
     }
 
     data = malloc(IP_MAXPACKET);
-
-    /*
-    if(data == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "malloc() error!");
-    }
-    */
-
     start = (uint8_t*)data;
     end = (uint8_t*)data;
+
+    printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
+    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
 PacketCraft::Packet::Packet(void* packetBuffer):
@@ -60,23 +55,17 @@ PacketCraft::Packet::Packet(void* packetBuffer):
     }
 
     data = packetBuffer;
-    /*
-    if(data == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "buffer supplied is null!");
-    }
-    */
-
     start = (uint8_t*)data;
     end = (uint8_t*)data;
+
+    printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
+    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
 PacketCraft::Packet::~Packet()
 {
-    if(outsideBufferSupplied == FALSE)
-    {
-        FreePacket();
-    }
+    FreePacket();
+    free(printBuffer);
 }
 
 int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
@@ -192,17 +181,18 @@ void PacketCraft::Packet::ResetPacketBuffer()
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
     }
+
+    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
 int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) const
 {
     std::ofstream file;
-    uint32_t bufferSize = 10'000;
-    char* buffer = (char*)malloc(bufferSize);
 
     if(printToFile == TRUE)
     {
-        file.open(fullFilePath, std::ofstream::out | std::ofstream::app);
+        if(!file.is_open())
+            file.open(fullFilePath, std::ofstream::out | std::ofstream::app);
     }
 
     uint32_t layerSize = 0; // next layer size, used to calculate data/options size of payloads
@@ -214,78 +204,78 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_ETHER_II:
             {
                 EthHeader* ethHeader = (EthHeader*)GetLayerStart(i);
-                PacketCraft::ConvertEthLayerToString(buffer, bufferSize, ethHeader);
+                PacketCraft::ConvertEthLayerToString(printBuffer, PRINT_BUFFER_SIZE, ethHeader);
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_ARP:
             {
                 ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(i);
-                PacketCraft::ConvertARPLayerToString(buffer, bufferSize, arpHeader);
+                PacketCraft::ConvertARPLayerToString(printBuffer, PRINT_BUFFER_SIZE, arpHeader);
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_IPV4:
             {
                 IPv4Header* ipv4Header = (IPv4Header*)GetLayerStart(i);
-                PacketCraft::ConvertIPv4LayerToString(buffer, bufferSize, ipv4Header);
+                PacketCraft::ConvertIPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv4Header);
 
                 layerSize = ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8);
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_IPV6:
             {
                 IPv6Header* ipv6Header = (IPv6Header*)GetLayerStart(i);
-                PacketCraft::ConvertIPv6LayerToString(buffer, bufferSize, ipv6Header);
+                PacketCraft::ConvertIPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv6Header);
                 uint32_t nextProtocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 
                 if(nextProtocol == IPPROTO_ICMPV6 || nextProtocol == IPPROTO_TCP)
                     layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_ICMPV4:
             {
                 ICMPv4Header* icmpv4Header = (ICMPv4Header*)GetLayerStart(i);
-                PacketCraft::ConvertICMPv4LayerToString(buffer, bufferSize, icmpv4Header, layerSize - sizeof(ICMPv4Header));
+                PacketCraft::ConvertICMPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv4Header, layerSize - sizeof(ICMPv4Header));
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_ICMPV6:
             {
                 ICMPv6Header* icmpv6Header = (ICMPv6Header*)GetLayerStart(i);
-                PacketCraft::ConvertICMPv6LayerToString(buffer, bufferSize, icmpv6Header, layerSize - sizeof(ICMPv6Header));
+                PacketCraft::ConvertICMPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv6Header, layerSize - sizeof(ICMPv6Header));
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
@@ -293,24 +283,24 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             {
                 TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(i);
                 uint32_t tcpDataSize = layerSize - (tcpHeader->doff * 32 / 8);
-                PacketCraft::ConvertTCPLayerToString(buffer, bufferSize, tcpHeader, tcpDataSize);
+                PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader, tcpDataSize);
              
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
             case PC_UDP:
             {
                 UDPHeader* udpHeader = (UDPHeader*)GetLayerStart(i);
-                PacketCraft::ConvertUDPLayerToString(buffer, bufferSize, udpHeader);
+                PacketCraft::ConvertUDPLayerToString(printBuffer, PRINT_BUFFER_SIZE, udpHeader);
 
                 if(printToFile == TRUE)
-                    file.write(buffer, PacketCraft::GetStrLen(buffer));
+                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
                 else
-                    std::cout << buffer << std::endl;
+                    std::cout << printBuffer << std::endl;
 
                 break;
             }
@@ -319,16 +309,13 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(file.is_open())
                     file.close();
 
-                free(buffer);
                 LOG_ERROR(APPLICATION_ERROR, "unknown protocol detected!");
                 return APPLICATION_ERROR;
             }
-
-            memset(buffer, '\0', bufferSize);
         }
-    }
 
-    free(buffer);
+        memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+    }
 
     if(file.is_open())
         file.close();
@@ -365,11 +352,6 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
 
-            if(ipHeader->ip_hl > 5)
-            {   
-                // checks if there is an options field present. TODO: do we need to do anything?
-            }
-
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
@@ -391,10 +373,6 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
 
-            if(layerSize > sizeof(ICMPv4Header))
-            {
-                // checks if there is a data field present. TODO: do we need to do anything?
-            }
             return NO_ERROR;
         }
         case PC_ICMPV6: // TODO: TEST!!!
@@ -402,10 +380,6 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             AddLayer(PC_ICMPV6, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
 
-            if(layerSize > sizeof(ICMPv6Header))
-            {
-                // checks if there is a data field present. TODO: do we need to do anything?
-            }
             return NO_ERROR;
         }
         case PC_TCP:
@@ -438,7 +412,8 @@ void PacketCraft::Packet::FreePacket()
 {
     if(data)
     {
-        free(data);
+        if(outsideBufferSupplied == FALSE)
+            free(data);
     }
 
     data = nullptr;

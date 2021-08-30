@@ -1221,7 +1221,10 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
     int newLineAt = 15;
 
     bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
-    uint32_t optionsTotalLength = (tcpHeader->doff * 32 / 8) - sizeof(TCPHeader);
+    uint32_t optionsTotalLength = 0;
+    
+    if(hasOptions == TRUE)
+        optionsTotalLength = (tcpHeader->doff * 32 / 8) - sizeof(TCPHeader);
 
     if(hasOptions)
     {
