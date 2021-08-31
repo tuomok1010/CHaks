@@ -225,7 +225,7 @@ int PacketCraft::IPv4PingPacket::PrintPacketData() const
     return NO_ERROR;
 }
 
-int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
+int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
     {
@@ -262,11 +262,6 @@ int PacketCraft::IPv4PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t
             AddLayer(PC_ICMPV4, layerSize);
             memcpy(GetLayerStart(GetNLayers() - 1), packet, layerSize);
             icmpv4Header = (ICMPv4Header*)GetLayerStart(GetNLayers() - 1);
-
-            if(layerSize > sizeof(ICMPv4Header))
-            {
-                // checks if there is a data field present. TODO: do we need to do anything?
-            }
 
             return NO_ERROR;
         }

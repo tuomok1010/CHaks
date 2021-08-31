@@ -195,7 +195,7 @@ int PacketCraft::ARPPacket::PrintPacketData() const
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
-int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
+int PacketCraft::ARPPacket::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
     {

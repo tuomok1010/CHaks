@@ -1222,8 +1222,8 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
 
     bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
     uint32_t optionsTotalLength = 0;
-    
-    if(hasOptions == TRUE)
+
+    if(hasOptions == TRUE && tcpHeader->doff != 0)
         optionsTotalLength = (tcpHeader->doff * 32 / 8) - sizeof(TCPHeader);
 
     if(hasOptions)
@@ -1305,7 +1305,7 @@ int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHea
     char* dataPtr = data;
     uint32_t newLineAt = 15;
 
-    bool32 hasData = dataSize > sizeof(UDPHeader) ? TRUE : FALSE;
+    bool32 hasData = dataSize > 0 ? TRUE : FALSE;
 
     for(unsigned int i = 0; i < dataSize; ++i)
     {
@@ -1313,6 +1313,7 @@ int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHea
         snprintf(dataPtr, len + 1, "%x ", (uint16_t)udpHeader->data[i]);
         dataPtr += len;
 
+        
         if(i != 0 && i % newLineAt == 0)
         {
             *dataPtr++ = '\n';

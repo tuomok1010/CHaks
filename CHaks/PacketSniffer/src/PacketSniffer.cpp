@@ -13,6 +13,7 @@
 
 CHaks::PacketSniffer::PacketSniffer() :
     socketFd(-1),
+    saveToFile(FALSE),
     packetNumber(0)
 {
 
@@ -238,7 +239,7 @@ int CHaks::PacketSniffer::GetFullFilePath(const PacketCraft::Packet& packet, cha
     const char* packetNumStr = std::to_string(packetNumber).c_str();
     PacketCraft::CopyStr(fileName, sizeof(fileName), packetNumStr);
 
-    std::cout << "packet num is " << packetNumStr << std::endl;
+    std::cout << "packet num int is " << packetNumber << " packet num str is " << packetNumStr << std::endl;
 
     PacketCraft::CopyStr(fileName + PacketCraft::GetStrLen(packetNumStr), 1, "_");
     char* fileNamePtr = fileName + PacketCraft::GetStrLen(packetNumStr) + 1;

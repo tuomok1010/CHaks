@@ -136,7 +136,7 @@ void PacketCraft::IPv6PingPacket::ResetPacketBuffer()
     icmpv6Header = nullptr;
 }
 
-int PacketCraft::IPv6PingPacket::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
+int PacketCraft::IPv6PingPacket::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
     {

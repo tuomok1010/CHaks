@@ -47,7 +47,7 @@ namespace PacketCraft
         inline uint32_t GetNLayers() const { return nLayers; }
 
         protected:
-        virtual int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short nextHeader = PC_PROTO_ETH);
+        virtual int ProcessReceivedPacket(uint8_t* packet, int layerSize = 0, unsigned short nextHeader = PC_PROTO_ETH);
         virtual void FreePacket();
 
         /////////////////

@@ -195,7 +195,7 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             file.open(fullFilePath, std::ofstream::out | std::ofstream::app);
     }
 
-    uint32_t layerSize = 0; // next layer size, used to calculate data/options size of payloads
+    int layerSize = 0; // next layer size, used to calculate data/options size of payloads
     for(unsigned int i = 0; i < nLayers; ++i)
     {
         uint32_t layerProtocol = GetLayerType(i);
@@ -204,6 +204,15 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_ETHER_II:
             {
                 EthHeader* ethHeader = (EthHeader*)GetLayerStart(i);
+                if(ethHeader == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "ethHeader was null!");
+                    return APPLICATION_ERROR;
+                }
+
                 PacketCraft::ConvertEthLayerToString(printBuffer, PRINT_BUFFER_SIZE, ethHeader);
 
                 if(printToFile == TRUE)
@@ -216,6 +225,15 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_ARP:
             {
                 ARPHeader* arpHeader = (ARPHeader*)GetLayerStart(i);
+                if(arpHeader == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "arpHeader was null!");
+                    return APPLICATION_ERROR;
+                }
+
                 PacketCraft::ConvertARPLayerToString(printBuffer, PRINT_BUFFER_SIZE, arpHeader);
 
                 if(printToFile == TRUE)
@@ -228,9 +246,20 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_IPV4:
             {
                 IPv4Header* ipv4Header = (IPv4Header*)GetLayerStart(i);
+                if(ipv4Header == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "ipv4Header was null!");
+                    return APPLICATION_ERROR;
+                }
+
                 PacketCraft::ConvertIPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv4Header);
 
                 layerSize = ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8);
+                if(layerSize < 0)
+                    layerSize = 0;
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -242,11 +271,20 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_IPV6:
             {
                 IPv6Header* ipv6Header = (IPv6Header*)GetLayerStart(i);
-                PacketCraft::ConvertIPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv6Header);
-                uint32_t nextProtocol = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+                if(ipv6Header == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
 
-                if(nextProtocol == IPPROTO_ICMPV6 || nextProtocol == IPPROTO_TCP)
-                    layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
+                    LOG_ERROR(APPLICATION_ERROR, "ipv6Header was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                PacketCraft::ConvertIPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv6Header);
+
+                layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
+                if(layerSize < 0)
+                    layerSize = 0;
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -258,7 +296,20 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_ICMPV4:
             {
                 ICMPv4Header* icmpv4Header = (ICMPv4Header*)GetLayerStart(i);
-                PacketCraft::ConvertICMPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv4Header, layerSize - sizeof(ICMPv4Header));
+                if(icmpv4Header == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "icmpv4Header was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                int payloadDataSize = layerSize - sizeof(ICMPv4Header);
+                if(payloadDataSize < 0)
+                    payloadDataSize = 0;
+
+                PacketCraft::ConvertICMPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv4Header, payloadDataSize);
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -270,7 +321,20 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_ICMPV6:
             {
                 ICMPv6Header* icmpv6Header = (ICMPv6Header*)GetLayerStart(i);
-                PacketCraft::ConvertICMPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv6Header, layerSize - sizeof(ICMPv6Header));
+                if(icmpv6Header == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "icmpv6Header was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                int payloadDataSize = layerSize - sizeof(ICMPv6Header);
+                if(payloadDataSize < 0)
+                    payloadDataSize = 0;
+
+                PacketCraft::ConvertICMPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv6Header, payloadDataSize);
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -282,7 +346,19 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_TCP:
             {
                 TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(i);
-                uint32_t tcpDataSize = layerSize - (tcpHeader->doff * 32 / 8);
+                if(tcpHeader == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "tcpHeader was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                int tcpDataSize = layerSize - (tcpHeader->doff * 32 / 8);
+                if(tcpDataSize < 0)
+                    tcpDataSize = 0;
+
                 PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader, tcpDataSize);
              
                 if(printToFile == TRUE)
@@ -295,6 +371,15 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             case PC_UDP:
             {
                 UDPHeader* udpHeader = (UDPHeader*)GetLayerStart(i);
+                if(udpHeader == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    LOG_ERROR(APPLICATION_ERROR, "udpHeader was null!");
+                    return APPLICATION_ERROR;
+                }
+
                 PacketCraft::ConvertUDPLayerToString(printBuffer, PRINT_BUFFER_SIZE, udpHeader);
 
                 if(printToFile == TRUE)
@@ -324,7 +409,7 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
-int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize, unsigned short protocol)
+int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
     {
@@ -351,11 +436,13 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
 
             // this is the next layer size
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
+            if(layerSize < 0)
+                layerSize = 0;
 
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
-        case PC_IPV6: // TODO: TEST!!!
+        case PC_IPV6:
         {
             IPv6Header* ipv6Header = (IPv6Header*)packet;
             AddLayer(PC_IPV6, sizeof(IPv6Header));
@@ -363,7 +450,11 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, uint32_t layerSi
             protocol = NetworkProtoToPacketCraftProto(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt);
 
             if(protocol == PC_ICMPV6 || protocol == PC_TCP || protocol == PC_UDP)
+            {
                 layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
+                if(layerSize < 0)
+                    layerSize = 0;
+            }
 
             packet += sizeof(IPv6Header);
             break;

@@ -19,7 +19,7 @@ namespace PacketCraft
         int Send(const int socket, const char* interfaceName) const;
         void ResetPacketBuffer();
 
-        int ProcessReceivedPacket(uint8_t* packet, uint32_t layerSize = 0, unsigned short protocol = PC_PROTO_ETH) override;
+        int ProcessReceivedPacket(uint8_t* packet, int layerSize = 0, unsigned short protocol = PC_PROTO_ETH) override;
         void FreePacket() override;
 
         EthHeader* ethHeader;
