@@ -6,7 +6,7 @@
 
 #include "PCTypes.h"
 
-#define PRINT_BUFFER_SIZE 10'000
+#define PRINT_BUFFER_SIZE 65'536
 
 namespace PacketCraft
 {

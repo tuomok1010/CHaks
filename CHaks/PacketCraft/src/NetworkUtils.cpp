@@ -52,6 +52,7 @@ uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProto
     }
 }
 
+// TODO: finish and test
 uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
 {
     if(dataSize <= 0)
@@ -1061,7 +1062,7 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
 
     // TODO: test/improve options printing
     bool32 hasIpv4Options = ipv4Header->ip_hl > 5 ? TRUE : FALSE;
-    uint32_t ipv4OptionsSize = ipv4Header->ip_hl - 5;
+    uint32_t ipv4OptionsSize = (ipv4Header->ip_hl * 32 / 8) - (20); // header without options is 20 bytes
 
     char options[PC_IPV4_MAX_OPTIONS_STR_SIZE]{};
     char* optionsPtr = options;
@@ -1070,7 +1071,7 @@ int PacketCraft::ConvertIPv4LayerToString(char* buffer, size_t bufferSize, IPv4H
     for(unsigned int i = 0; i < ipv4OptionsSize; ++i)
     {
         int len = snprintf(NULL, 0, "%x ", (uint16_t)ipv4Header->options[i]);
-        snprintf(optionsPtr, len + 1, "%x ", (uint16_t)ipv4Header->options[i]);
+        snprintf(optionsPtr, len + 1, "%x ", (uint16_t)ipv4Header->options[i]); // NOTE: +1 because snprintf appends null terminating char at the end
         optionsPtr += len;
 
         if(i != 0 && i % newLineAt == 0)
@@ -1150,7 +1151,7 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
     for(unsigned int i = 0; i < icmpv4DataSize; ++i)
     {
         int len = snprintf(NULL, 0, "%x ", (uint16_t)icmpv4Header->data[i]);
-        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv4Header->data[i]);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv4Header->data[i]); // NOTE: +1 because snprintf appends null terminating char at the end
         dataPtr += len;
 
         if(i != 0 && i % newLineAt == 0)
@@ -1186,7 +1187,7 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
     for(unsigned int i = 0; i < icmpv6DataSize; ++i)
     {
         int len = snprintf(NULL, 0, "%x ", (uint16_t)icmpv6Header->data[i]);
-        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv6Header->data[i]);
+        snprintf(dataPtr, len + 1, "%x ", (uint16_t)icmpv6Header->data[i]); // NOTE: +1 because snprintf appends null terminating char at the end
         dataPtr += len;
 
         if(i != 0 && i % newLineAt == 0)
@@ -1214,28 +1215,36 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
 
 int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize)
 {
-    char options[PC_TCP_MAX_OPTIONS_STR_SIZE]{};
+    if(tcpDataSize + sizeof(TCPHeader) > bufferSize)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "buffer too small for TCP packet");
+        return APPLICATION_ERROR;
+    }
+
+    char options[PC_TCP_MAX_OPTIONS_STR_SIZE]{}; // TODO: should we put this in the heap?
     char* optionsStrPtr = options;
 
     uint8_t* optionsAndDataPtr = tcpHeader->optionsAndData;
     int newLineAt = 15;
 
     bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
-    uint32_t optionsTotalLength = 0;
+    int optionsTotalLength = 0; // NOTE: changed to int for testing, TODO: change back to uint32?
 
-    if(hasOptions == TRUE && tcpHeader->doff != 0)
+    if(hasOptions == TRUE)
         optionsTotalLength = (tcpHeader->doff * 32 / 8) - sizeof(TCPHeader);
 
-    if(hasOptions)
+    if(hasOptions == TRUE)
     {
-        uint16_t optionKind = (uint16_t)*optionsAndDataPtr++;
-        uint16_t optionLength = (uint16_t)*optionsAndDataPtr++;
+        uint16_t optionKind = (uint16_t)*optionsAndDataPtr;
+        ++optionsAndDataPtr;
+        uint16_t optionLength = (uint16_t)*optionsAndDataPtr;
+        ++optionsAndDataPtr;
 
         int len = snprintf(NULL, 0, "option kind: %u\noption length: %u\n", optionKind, optionLength);
-        snprintf(optionsStrPtr, len + 1, "option kind: %u\noption length: %u\n", optionKind, optionLength);
+        snprintf(optionsStrPtr, len + 1, "option kind: %u\noption length: %u\n", optionKind, optionLength); // NOTE: +1 because snprintf appends null terminating char at the end
         optionsStrPtr += len;
 
-        for(unsigned int i = 0; i < optionsTotalLength - 2; ++i)
+        for(int i = 0; i < optionsTotalLength - 2; ++i) // NOTE: -2 because we already grapped optionKind and optionLength
         {
             len = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
             snprintf(optionsStrPtr, len + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
@@ -1251,7 +1260,7 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
         *optionsStrPtr = '\0';
     }
 
-    // TODO: is there a way to do this with a single buffer?
+    // TODO: is there a way to do this with a single buffer? Also should we allocate buffers in the heap?
     char data[PC_TCP_MAX_DATA_STR_SIZE]{};
     char dataAsChars[PC_TCP_MAX_DATA_STR_SIZE]{};
     char* dataPtr = data;
@@ -1262,8 +1271,8 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
         int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
         snprintf(dataPtr, dataLen + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
 
-        int dataAsCharsLen = snprintf(NULL, 0, "%c ", (unsigned char)*optionsAndDataPtr);
-        snprintf(dataAsCharsPtr, dataAsCharsLen + 1, "%c ", (unsigned char)*optionsAndDataPtr);
+        int dataAsCharsLen = snprintf(NULL, 0, "%c", (unsigned char)*optionsAndDataPtr);
+        snprintf(dataAsCharsPtr, dataAsCharsLen + 1, "%c", (unsigned char)*optionsAndDataPtr);
 
         ++optionsAndDataPtr;
         dataPtr += dataLen;
@@ -1298,6 +1307,7 @@ tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHead
     return NO_ERROR;
 }
 
+// TODO: test!!!
 int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader)
 {
     uint32_t dataSize = udpHeader->len - sizeof(UDPHeader);

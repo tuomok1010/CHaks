@@ -213,7 +213,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                PacketCraft::ConvertEthLayerToString(printBuffer, PRINT_BUFFER_SIZE, ethHeader);
+                if(PacketCraft::ConvertEthLayerToString(printBuffer, PRINT_BUFFER_SIZE, ethHeader) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertEthLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -234,7 +243,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                PacketCraft::ConvertARPLayerToString(printBuffer, PRINT_BUFFER_SIZE, arpHeader);
+                if(PacketCraft::ConvertARPLayerToString(printBuffer, PRINT_BUFFER_SIZE, arpHeader) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertARPLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -255,7 +273,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                PacketCraft::ConvertIPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv4Header);
+                if(PacketCraft::ConvertIPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv4Header) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertIPv4LayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 layerSize = ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8);
                 if(layerSize < 0)
@@ -280,7 +307,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                PacketCraft::ConvertIPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv6Header);
+                if(PacketCraft::ConvertIPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, ipv6Header) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertIPv6LayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 layerSize = ntohs(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen);
                 if(layerSize < 0)
@@ -309,7 +345,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(payloadDataSize < 0)
                     payloadDataSize = 0;
 
-                PacketCraft::ConvertICMPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv4Header, payloadDataSize);
+                if(PacketCraft::ConvertICMPv4LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv4Header, payloadDataSize) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertICMPv4LayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -334,7 +379,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(payloadDataSize < 0)
                     payloadDataSize = 0;
 
-                PacketCraft::ConvertICMPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv6Header, payloadDataSize);
+                if(PacketCraft::ConvertICMPv6LayerToString(printBuffer, PRINT_BUFFER_SIZE, icmpv6Header, payloadDataSize) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertICMPv6LayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -359,7 +413,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(tcpDataSize < 0)
                     tcpDataSize = 0;
 
-                PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader, tcpDataSize);
+                if(PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader, tcpDataSize) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertTCPLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
              
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -380,7 +443,16 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                PacketCraft::ConvertUDPLayerToString(printBuffer, PRINT_BUFFER_SIZE, udpHeader);
+                if(PacketCraft::ConvertUDPLayerToString(printBuffer, PRINT_BUFFER_SIZE, udpHeader) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertTCPLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 if(printToFile == TRUE)
                     file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
@@ -393,6 +465,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             {
                 if(file.is_open())
                     file.close();
+
+                memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                 LOG_ERROR(APPLICATION_ERROR, "unknown protocol detected!");
                 return APPLICATION_ERROR;

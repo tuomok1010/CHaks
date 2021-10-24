@@ -9,7 +9,7 @@
 
 #define FQDN_MAX_STR_LEN                255
 
-// these ase used when allocating buffers for converting packet layers to strings
+// used when allocating buffers for printing different kinds of packet layers. Check PrintUDPLayer() in NetworkUtils for example
 #define PC_ETH_MAX_STR_SIZE             500
 #define PC_ARP_MAX_STR_SIZE             500
 #define PC_IPV4_MAX_STR_SIZE            1000
@@ -18,15 +18,15 @@
 #define PC_ICMPV6_MAX_STR_SIZE          1000
 #define PC_TCP_MAX_STR_SIZE             5000
 #define PC_UDP_MAX_STR_SIZE             5000
+////////////////////////////////////////////////////
 
+// used when converting packet layers into strings. Check ConvertUDPLayerToString in NetworkUtils for example
 #define PC_ICMPV4_MAX_DATA_STR_SIZE     500
 #define PC_IPV4_MAX_OPTIONS_STR_SIZE    500
 #define PC_ICMPV6_MAX_DATA_STR_SIZE     500
 #define PC_TCP_MAX_OPTIONS_STR_SIZE     500
-#define PC_TCP_MAX_DATA_STR_SIZE        2000
-#define PC_UDP_MAX_DATA_STR_SIZE        2000
-
-#define PC_PACKET_MAX_STR_SIZE          10'000
+#define PC_TCP_MAX_DATA_STR_SIZE        20'000
+#define PC_UDP_MAX_DATA_STR_SIZE        20'000
 ////////////////////////////////////////////////////
 
 
