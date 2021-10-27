@@ -11,7 +11,7 @@ void PrintHelp(char** argv)
         << "To use the program, provide the arguments in the following format:\n"
         << argv[0] << " <interface name> <save to file> <protocols>\n\n"
         << "<interface name>: the interface you wish to monitor.\n"
-        << "<save to file(true/false)>: if true saves packet data to file, if false prints packets in console"
+        << "<save to file(true/false)>: if true saves packet data to file, if false prints packets in console\n"
         << "<protocols>: types of packets to monitor. Following protocols are supported:\n";
 
    for(std::pair<const char*, uint32_t> e : CHaks::supportedProtocols)

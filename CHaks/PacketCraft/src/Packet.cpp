@@ -209,6 +209,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     if(file.is_open())
                         file.close();
 
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
                     LOG_ERROR(APPLICATION_ERROR, "ethHeader was null!");
                     return APPLICATION_ERROR;
                 }
@@ -224,11 +226,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_ARP:
@@ -238,6 +235,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "arpHeader was null!");
                     return APPLICATION_ERROR;
@@ -254,11 +253,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_IPV4:
@@ -268,6 +262,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "ipv4Header was null!");
                     return APPLICATION_ERROR;
@@ -288,11 +284,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(layerSize < 0)
                     layerSize = 0;
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_IPV6:
@@ -302,6 +293,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "ipv6Header was null!");
                     return APPLICATION_ERROR;
@@ -322,11 +315,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 if(layerSize < 0)
                     layerSize = 0;
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_ICMPV4:
@@ -336,6 +324,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "icmpv4Header was null!");
                     return APPLICATION_ERROR;
@@ -356,11 +346,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_ICMPV6:
@@ -370,6 +355,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "icmpv6Header was null!");
                     return APPLICATION_ERROR;
@@ -390,11 +377,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
-
                 break;
             }
             case PC_TCP:
@@ -405,15 +387,13 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     if(file.is_open())
                         file.close();
 
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
                     LOG_ERROR(APPLICATION_ERROR, "tcpHeader was null!");
                     return APPLICATION_ERROR;
                 }
 
-                int tcpDataSize = layerSize - (tcpHeader->doff * 32 / 8);
-                if(tcpDataSize < 0)
-                    tcpDataSize = 0;
-
-                if(PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader, tcpDataSize) == APPLICATION_ERROR)
+                if(PacketCraft::ConvertTCPLayerToString(printBuffer, PRINT_BUFFER_SIZE, tcpHeader) == APPLICATION_ERROR)
                 {
                     if(file.is_open())
                         file.close();
@@ -423,11 +403,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     LOG_ERROR(APPLICATION_ERROR, "ConvertTCPLayerToString() error!");
                     return APPLICATION_ERROR;
                 }
-             
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
 
                 break;
             }
@@ -438,6 +413,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                 {
                     if(file.is_open())
                         file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 
                     LOG_ERROR(APPLICATION_ERROR, "udpHeader was null!");
                     return APPLICATION_ERROR;
@@ -454,10 +431,61 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
                     return APPLICATION_ERROR;
                 }
 
-                if(printToFile == TRUE)
-                    file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
-                else
-                    std::cout << printBuffer << std::endl;
+                break;
+            }
+            case PC_HTTP:
+            {
+                uint32_t dataSize = GetLayerSize(i);
+                uint8_t* data = (uint8_t*)GetLayerStart(i);
+                if(data == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "HTTP data was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                if(PacketCraft::ConvertHTTPLayerToString(printBuffer, PRINT_BUFFER_SIZE, data, dataSize) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertTCPLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
+
+                break;
+            }
+            case PC_DNS:
+            {
+                uint32_t dataSize = GetLayerSize(i);
+                uint8_t* data = (uint8_t*)GetLayerStart(i);
+                if(data == nullptr)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "HTTP data was null!");
+                    return APPLICATION_ERROR;
+                }
+
+                if(ConvertDNSLayerToString(printBuffer, PRINT_BUFFER_SIZE, data, dataSize) == APPLICATION_ERROR)
+                {
+                    if(file.is_open())
+                        file.close();
+
+                    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+                    LOG_ERROR(APPLICATION_ERROR, "ConvertTCPLayerToString() error!");
+                    return APPLICATION_ERROR;
+                }
 
                 break;
             }
@@ -473,6 +501,11 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
             }
         }
 
+        if(printToFile == TRUE)
+            file.write(printBuffer, PacketCraft::GetStrLen(printBuffer));
+        else
+            std::cout << printBuffer << std::endl;
+
         memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
     }
 
@@ -483,6 +516,7 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
+// TODO: add payload protocols (HTTP, DNS etc.)
 int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
@@ -508,15 +542,15 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
             memcpy(GetLayerStart(nLayers - 1), packet, ipHeader->ip_hl * 32 / 8);
             protocol = NetworkProtoToPacketCraftProto(ipHeader->ip_p);
 
-            // this is the next layer size
+            // this is the next layer size (header + data)
             layerSize = ntohs(ipHeader->ip_len) - (ipHeader->ip_hl * 32 / 8);
-            if(layerSize < 0)
-                layerSize = 0;
+            if(layerSize <= 0)
+                return NO_ERROR;
 
             packet += (uint32_t)ipHeader->ip_hl * 32 / 8;
             break;
         }
-        case PC_IPV6:
+        case PC_IPV6: // TODO: need to support extension headers!
         {
             IPv6Header* ipv6Header = (IPv6Header*)packet;
             AddLayer(PC_IPV6, sizeof(IPv6Header));
@@ -547,18 +581,47 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
 
             return NO_ERROR;
         }
-        case PC_TCP:
+        case PC_TCP: // NOTE: this only adds the TCP header and options, data has its own case
         {
-            AddLayer(PC_TCP, layerSize);
-            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+            TCPHeader* tcpHeader = (TCPHeader*)packet;
+            AddLayer(PC_TCP, tcpHeader->doff * 32 / 8);
+            memcpy(GetLayerStart(nLayers - 1), packet, tcpHeader->doff * 32 / 8);
 
+            layerSize = layerSize - (tcpHeader->doff * 32 / 8);
+            protocol = GetTCPDataProtocol(tcpHeader);
+
+            if(layerSize <= 0) // if no data is present
+                return NO_ERROR;
+
+            packet += tcpHeader->doff * 32 / 8;
+            break;
+        }
+        case PC_UDP: // NOTE: this only adds the UDP header, data has its own case
+        {
+            UDPHeader* udpHeader = (UDPHeader*)packet;
+            AddLayer(PC_UDP, sizeof(UDPHeader));
+            memcpy(GetLayerStart(nLayers - 1), packet, sizeof(UDPHeader));
+
+            layerSize = layerSize - sizeof(UDPHeader);
+            protocol = GetUDPDataProtocol(udpHeader);
+
+            if(layerSize <= 0)
+                return NO_ERROR;
+
+            packet += sizeof(UDPHeader);
+            break;
+        }
+        // PAYLOAD DATA PROTOCOLS:
+        case PC_HTTP:
+        {
+            AddLayer(PC_HTTP, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
             return NO_ERROR;
         }
-        case PC_UDP:
+        case PC_DNS:
         {
-            AddLayer(PC_UDP, layerSize);
+            AddLayer(PC_DNS, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
-
             return NO_ERROR;
         }
         default:

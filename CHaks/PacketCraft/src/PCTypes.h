@@ -10,21 +10,21 @@
 #define FQDN_MAX_STR_LEN                255
 
 // used when allocating buffers for printing different kinds of packet layers. Check PrintUDPLayer() in NetworkUtils for example
-#define PC_ETH_MAX_STR_SIZE             500
-#define PC_ARP_MAX_STR_SIZE             500
-#define PC_IPV4_MAX_STR_SIZE            1000
-#define PC_IPV6_MAX_STR_SIZE            500
-#define PC_ICMPV4_MAX_STR_SIZE          1000
-#define PC_ICMPV6_MAX_STR_SIZE          1000
-#define PC_TCP_MAX_STR_SIZE             5000
-#define PC_UDP_MAX_STR_SIZE             5000
+#define PC_ETH_MAX_STR_SIZE             5000
+#define PC_ARP_MAX_STR_SIZE             5000
+#define PC_IPV4_MAX_STR_SIZE            5'000
+#define PC_IPV6_MAX_STR_SIZE            5'000
+#define PC_ICMPV4_MAX_STR_SIZE          5'000
+#define PC_ICMPV6_MAX_STR_SIZE          5'000
+#define PC_TCP_MAX_STR_SIZE             20'000
+#define PC_UDP_MAX_STR_SIZE             20'000
 ////////////////////////////////////////////////////
 
 // used when converting packet layers into strings. Check ConvertUDPLayerToString in NetworkUtils for example
-#define PC_ICMPV4_MAX_DATA_STR_SIZE     500
-#define PC_IPV4_MAX_OPTIONS_STR_SIZE    500
-#define PC_ICMPV6_MAX_DATA_STR_SIZE     500
-#define PC_TCP_MAX_OPTIONS_STR_SIZE     500
+#define PC_ICMPV4_MAX_DATA_STR_SIZE     5000
+#define PC_IPV4_MAX_OPTIONS_STR_SIZE    5000
+#define PC_ICMPV6_MAX_DATA_STR_SIZE     5000
+#define PC_TCP_MAX_OPTIONS_STR_SIZE     5000
 #define PC_TCP_MAX_DATA_STR_SIZE        20'000
 #define PC_UDP_MAX_DATA_STR_SIZE        20'000
 ////////////////////////////////////////////////////
@@ -50,10 +50,12 @@
 #define PC_ICMPV4           0x0005
 #define PC_ICMPV6           0x0006
 #define PC_TCP              0x0007
-#define PC_UDP              0x0008
+#define PC_TCP_OPTIONS      0x0008
+#define PC_UDP              0x0009
 
-// Supported application layer protocols. Used in NetworkUtils.h GetApplicationLayerProtocol()
-#define PC_HTTP             0x0009
+// Supported application layer protocols. Used in NetworkUtils GetTCPDataProtocol and GetUDPDataProtocol
+#define PC_HTTP             0x000a
+#define PC_DNS              0x000b
 /////////////////////////////////////////////////////
 
 
@@ -98,6 +100,7 @@ struct ICMPv4Header;
 struct ICMPv6Header;
 struct TCPHeader;
 struct UDPHeader;
+struct DNSHeader;
 struct TCPv4PseudoHeader;
 struct UDPv4PseudoHeader;
 

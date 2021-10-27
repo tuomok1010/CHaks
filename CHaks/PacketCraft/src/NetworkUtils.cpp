@@ -29,9 +29,9 @@ uint32_t PacketCraft::ProtoStrToUint32(const char* protocol)
     return PC_NONE;
 }
 
-uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProtocol)
+uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProtocolInHostByteOrder)
 {
-    switch(networkProtocol)
+    switch(networkProtocolInHostByteOrder)
     {
         case ETH_P_ARP:
             return PC_ARP;
@@ -53,29 +53,24 @@ uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProto
 }
 
 // TODO: finish and test
-uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize)
+uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader)
 {
-    if(dataSize <= 0)
-        return PC_NONE;
-
     // check for HTTP
-    char* buffer = (char*)malloc(dataSize);
-    CopyUntil(buffer, dataSize, (char*)tcpHeader + (tcpHeader->doff * 32 / 8), '\n');
-    int res = FindInStr(buffer, "HTTP");
-
-    if(res != -1)
-    {
-        free(buffer);
+    if(ntohs(tcpHeader->source) == 80 || ntohs(tcpHeader->dest) == 80)
         return PC_HTTP;
-    }
-    /////////////////
 
-    free(buffer);
+    // check for DNS
+    if(ntohs(tcpHeader->source) == 53 || ntohs(tcpHeader->dest) == 53)
+        return PC_DNS;
+
     return PC_NONE;
 }
 
 uint32_t PacketCraft::GetUDPDataProtocol(UDPHeader* udpHeader)
 {
+    if(ntohs(udpHeader->dest) == 53 || ntohs(udpHeader->source == 53))
+        return PC_DNS;
+
     return PC_NONE;
 }
 
@@ -925,7 +920,7 @@ int PacketCraft::PrintICMPv6Layer(ICMPv6Header* icmpv6Header, size_t dataSize)
 int PacketCraft::PrintTCPLayer(TCPHeader* tcpHeader, size_t dataSize)
 {
     char* buffer = (char*)malloc(PC_TCP_MAX_STR_SIZE);
-    if(ConvertTCPLayerToString(buffer, PC_TCP_MAX_STR_SIZE, tcpHeader, dataSize) == APPLICATION_ERROR)
+    if(ConvertTCPLayerToString(buffer, PC_TCP_MAX_STR_SIZE, tcpHeader) == APPLICATION_ERROR)
     {
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "ConvertEthLayerToString() error!");
@@ -1213,18 +1208,12 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
     }
 }
 
-int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize)
+int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader)
 {
-    if(tcpDataSize + sizeof(TCPHeader) > bufferSize)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "buffer too small for TCP packet");
-        return APPLICATION_ERROR;
-    }
-
     char options[PC_TCP_MAX_OPTIONS_STR_SIZE]{}; // TODO: should we put this in the heap?
     char* optionsStrPtr = options;
 
-    uint8_t* optionsAndDataPtr = tcpHeader->optionsAndData;
+    uint8_t* optionsPtr = tcpHeader->options;
     int newLineAt = 15;
 
     bool32 hasOptions = (tcpHeader->doff > 5) ? TRUE : FALSE;
@@ -1235,10 +1224,8 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
 
     if(hasOptions == TRUE)
     {
-        uint16_t optionKind = (uint16_t)*optionsAndDataPtr;
-        ++optionsAndDataPtr;
-        uint16_t optionLength = (uint16_t)*optionsAndDataPtr;
-        ++optionsAndDataPtr;
+        uint16_t optionKind = (uint16_t)*optionsPtr++;
+        uint16_t optionLength = (uint16_t)*optionsPtr++;
 
         int len = snprintf(NULL, 0, "option kind: %u\noption length: %u\n", optionKind, optionLength);
         snprintf(optionsStrPtr, len + 1, "option kind: %u\noption length: %u\n", optionKind, optionLength); // NOTE: +1 because snprintf appends null terminating char at the end
@@ -1246,9 +1233,9 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
 
         for(int i = 0; i < optionsTotalLength - 2; ++i) // NOTE: -2 because we already grapped optionKind and optionLength
         {
-            len = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
-            snprintf(optionsStrPtr, len + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
-            ++optionsAndDataPtr;
+            len = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsPtr);
+            snprintf(optionsStrPtr, len + 1, "%x\t", (uint16_t)*optionsPtr);
+            ++optionsPtr;
             optionsStrPtr += len;
 
             if(i != 0 && i % newLineAt == 0)
@@ -1260,39 +1247,12 @@ int PacketCraft::ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHea
         *optionsStrPtr = '\0';
     }
 
-    // TODO: is there a way to do this with a single buffer? Also should we allocate buffers in the heap?
-    char data[PC_TCP_MAX_DATA_STR_SIZE]{};
-    char dataAsChars[PC_TCP_MAX_DATA_STR_SIZE]{};
-    char* dataPtr = data;
-    char* dataAsCharsPtr = dataAsChars;
-
-    for(unsigned int i = 0; i < tcpDataSize; ++i)
-    {
-        int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*optionsAndDataPtr);
-        snprintf(dataPtr, dataLen + 1, "%x\t", (uint16_t)*optionsAndDataPtr);
-
-        int dataAsCharsLen = snprintf(NULL, 0, "%c", (unsigned char)*optionsAndDataPtr);
-        snprintf(dataAsCharsPtr, dataAsCharsLen + 1, "%c", (unsigned char)*optionsAndDataPtr);
-
-        ++optionsAndDataPtr;
-        dataPtr += dataLen;
-        dataAsCharsPtr += dataAsCharsLen;
-
-        if(i != 0 && i % newLineAt == 0)
-        {
-            *dataPtr++ = '\n';
-        }
-    }
-
-    *dataPtr = '\0';
-    *dataAsCharsPtr = '\0';
-
     int res = snprintf(buffer, bufferSize, "[TCP]:\nsource port: %u destination port: %u\nsequence number: %u\nacknowledgement number: %u\n\
-data offset: %u\nflags: 0x%x\nFIN(%u), SYN(%u), RST(%u), PSH(%u), ACK(%u), URG(%u)\nwindow size: %u\nchecksum: %u\nurgent pointer: %u\n\n\
-[options](%u bytes):\n%s\n\n[data]:\n%s\n\n[data as chars]:\n%s\n . . . . . . . . . . \n", ntohs(tcpHeader->source), ntohs(tcpHeader->dest), ntohl(tcpHeader->seq), 
+data offset: %u\nflags(0x%x):\n\tFIN(%u), SYN(%u), RST(%u), PSH(%u), ACK(%u), URG(%u)\nwindow size: %u\nchecksum: %u\nurgent pointer: %u\n\n\
+[options](%u bytes):\n%s\n . . . . . . . . . . \n", ntohs(tcpHeader->source), ntohs(tcpHeader->dest), ntohl(tcpHeader->seq), 
 ntohl(tcpHeader->ack_seq), tcpHeader->doff, (uint16_t)tcpHeader->th_flags, tcpHeader->fin, tcpHeader->syn, tcpHeader->rst, tcpHeader->psh, tcpHeader->ack, 
 tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHeader->urg_ptr), optionsTotalLength, 
-(hasOptions == TRUE ? options : "NONE FOUND\n"), (tcpDataSize > 0 ? data : "NONE FOUND\n"), (tcpDataSize > 0 ? dataAsChars : "NONE FOUND"));
+(hasOptions == TRUE ? options : "NONE FOUND\n"));
 
     if(res > -1 && res < (int)bufferSize)
     {
@@ -1303,38 +1263,79 @@ tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHead
         LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
         return APPLICATION_ERROR;
     }
-
-    return NO_ERROR;
 }
 
-// TODO: test!!!
 int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader)
 {
-    uint32_t dataSize = udpHeader->len - sizeof(UDPHeader);
-    char data[PC_UDP_MAX_DATA_STR_SIZE]{};
-    char* dataPtr = data;
-    uint32_t newLineAt = 15;
+    int res = snprintf(buffer, bufferSize, "[UDP]:\nsource port: %u\ndestination port: %u\nlength: %u\nchecksum: %u, %x\n . . . . . . . . . . \n", 
+    ntohs(udpHeader->source), ntohs(udpHeader->dest), ntohs(udpHeader->len), ntohs(udpHeader->check), ntohs(udpHeader->check));
 
-    bool32 hasData = dataSize > 0 ? TRUE : FALSE;
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+// TODO: improve!
+int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
+{
+    uint8_t* dataPtr = data;
+
+    // TODO: is there a way to do this with a single buffer? Also should we allocate buffers in the heap?
+    char dataStr[PC_TCP_MAX_DATA_STR_SIZE]{};
+    char dataAsCharsStr[PC_TCP_MAX_DATA_STR_SIZE]{};
+    char* dataStrPtr = dataStr;
+    char* dataAsCharsPtr = dataAsCharsStr;
+    uint32_t newLineAt = 15;
 
     for(unsigned int i = 0; i < dataSize; ++i)
     {
-        int len = snprintf(NULL, 0, "%x ", (uint16_t)udpHeader->data[i]);
-        snprintf(dataPtr, len + 1, "%x ", (uint16_t)udpHeader->data[i]);
-        dataPtr += len;
+        int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*dataPtr);
+        snprintf(dataStrPtr, dataLen + 1, "%x\t", (uint16_t)*dataPtr);
 
-        
+        int dataAsCharsLen = snprintf(NULL, 0, "%c", (unsigned char)*dataPtr);
+        snprintf(dataAsCharsPtr, dataAsCharsLen + 1, "%c", (unsigned char)*dataPtr);
+
+        ++dataPtr;
+        dataStrPtr += dataLen;
+        dataAsCharsPtr += dataAsCharsLen;
+
         if(i != 0 && i % newLineAt == 0)
         {
-            *dataPtr++ = '\n';
+            *dataStrPtr++ = '\n';
         }
     }
 
-    *dataPtr = '\0';
+    *dataStrPtr = '\0';
+    *dataAsCharsPtr = '\0';
 
-    int res = snprintf(buffer, bufferSize, "[UDP]:\nsource port: %u\ndestination port: %u\nlength: %u\nchecksum: %u, %x\n\n[data](%u bytes):\n%s\n . . . . . . . . . . \n", 
-    ntohs(udpHeader->source), ntohs(udpHeader->dest), ntohs(udpHeader->len), ntohs(udpHeader->check), ntohs(udpHeader->check), dataSize, 
-    (hasData == TRUE ? data : "NONE FOUND\n"));
+    int res = snprintf(buffer, bufferSize, "[HTTP]:\nData:\n%s\n\nData as text:\n%s\n . . . . . . . . . . \n", dataStr, dataAsCharsStr);
+
+    if(res > -1 && res < (int)bufferSize)
+    {
+        return NO_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "snprintf() error!");
+        return APPLICATION_ERROR;
+    }
+}
+
+int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
+{
+    DNSHeader* dnsHeader = (DNSHeader*)data;
+
+    int res = snprintf(buffer, bufferSize, "[DNS]:\nidentification: 0x%x\nflags(0x%x):\n\t\
+QR: %u, OPCODE: %u, AA: %u, TC: %u, RD: %u, RA: %u, Z: %u, RCODE: %u\n\
+number of questions: %u\nnumber of answers: %u\nnumber of authority resource records: %u\nnumber of additional authority resource records: %u",
+ntohs(dnsHeader->id), ntohs(dnsHeader->flags), dnsHeader->qr, dnsHeader->opcode, dnsHeader->aa, dnsHeader->tc, dnsHeader->rd, dnsHeader->ra,
+dnsHeader->zero, dnsHeader->rcode, ntohs(dnsHeader->qcount), ntohs(dnsHeader->ancount), ntohs(dnsHeader->nscount), ntohs(dnsHeader->adcount));
 
     if(res > -1 && res < (int)bufferSize)
     {

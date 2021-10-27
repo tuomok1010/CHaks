@@ -7,6 +7,7 @@
 
 namespace PacketCraft
 {
+    // used in const char* PacketCraft::ProtoUint32ToStr(uint32_t protocol)
     const static std::unordered_map<uint32_t, const char*> networkProtocols
     {
         {PC_NONE, "NONE"},
@@ -18,14 +19,15 @@ namespace PacketCraft
         {PC_ICMPV6, "ICMPV6"},
         {PC_TCP, "TCP"},
         {PC_UDP, "UDP"},
-        {PC_HTTP, "HTTP"}
+        {PC_HTTP, "HTTP"},
+        {PC_DNS, "DNS"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);
     uint32_t ProtoStrToUint32(const char* protocol);
-    uint32_t NetworkProtoToPacketCraftProto(unsigned short networkProtocol);
+    uint32_t NetworkProtoToPacketCraftProto(unsigned short networkProtocolInHostByteOrder);
 
-    uint32_t GetTCPDataProtocol(TCPHeader* tcpHeader, size_t dataSize);
+    uint32_t GetTCPDataProtocol(TCPHeader* tcpHeader);
     uint32_t GetUDPDataProtocol(UDPHeader* udpHeader);
 
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
@@ -98,8 +100,10 @@ namespace PacketCraft
     int ConvertIPv6LayerToString(char* buffer, size_t bufferSize, IPv6Header* ipv6Header);
     int ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICMPv4Header* icmpv4Header, size_t icmpv4DataSize = 0);
     int ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICMPv6Header* icmpv6Header, size_t icmpv6DataSize = 0);
-    int ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader, size_t tcpDataSize = 0);
+    int ConvertTCPLayerToString(char* buffer, size_t bufferSize, TCPHeader* tcpHeader);
     int ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader);
+    int ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
+    int ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
     //////////////////////////////////////////////////////////////////////////////////////
 
 }

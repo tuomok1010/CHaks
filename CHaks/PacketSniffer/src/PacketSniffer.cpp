@@ -172,20 +172,6 @@ int CHaks::PacketSniffer::ReceivePacket(const int socketFd)
             {
                 isValid = TRUE;
             }
-
-            // check the tcp payload data protocol
-            if(PacketCraft::CompareStr(packetProtocolStr, "TCP") == TRUE)
-            {
-                TCPHeader* tcpHeader = (TCPHeader*)packet.GetLayerStart(i);
-                uint32_t tcpDataSize = packet.GetLayerSize(i) - (tcpHeader->doff * 32 / 8);
-                uint32_t tcpDataProtoInt = PacketCraft::GetTCPDataProtocol(tcpHeader, tcpDataSize);
-                const char* tcpDataProtoStr = PacketCraft::ProtoUint32ToStr(tcpDataProtoInt);
-
-                if(PacketCraft::CompareStr(tcpDataProtoStr, protocolsSupplied[j]) == TRUE)
-                {
-                    isValid = TRUE;
-                }
-            }
         }
     }
 
@@ -251,20 +237,6 @@ int CHaks::PacketSniffer::GetFullFilePath(const PacketCraft::Packet& packet, cha
         fileNamePtr += PacketCraft::GetStrLen(proto);
         PacketCraft::CopyStr(fileNamePtr, 1, "_");
         ++fileNamePtr;
-
-        // add the tcp payload data protocol to the filename
-        if(PacketCraft::CompareStr(proto, "TCP") == TRUE)
-        {
-            TCPHeader* tcpHeader = (TCPHeader*)packet.GetLayerStart(i);
-            uint32_t tcpDataSize = packet.GetLayerSize(i) - (tcpHeader->doff * 32 / 8);
-            uint32_t tcpDataProtoInt = PacketCraft::GetTCPDataProtocol(tcpHeader, tcpDataSize);
-            const char* tcpDataProtoStr = PacketCraft::ProtoUint32ToStr(tcpDataProtoInt);
-
-            PacketCraft::CopyStr(fileNamePtr, PROTOCOL_NAME_SIZE, tcpDataProtoStr);
-            fileNamePtr += PacketCraft::GetStrLen(tcpDataProtoStr);
-            PacketCraft::CopyStr(fileNamePtr, 1, "_");
-            ++fileNamePtr;
-        }
     }
 
     PacketCraft::CopyStr(fileNamePtr, 5, ".txt");
