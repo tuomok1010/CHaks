@@ -27,6 +27,8 @@
 #define PC_TCP_MAX_OPTIONS_STR_SIZE     5000
 #define PC_TCP_MAX_DATA_STR_SIZE        20'000
 #define PC_UDP_MAX_DATA_STR_SIZE        20'000
+#define PC_DNS_MAX_DATA_STR_SIZE        20'000
+#define PC_DNS_MAX_Q_SECTION_STR_SIZE   5000
 ////////////////////////////////////////////////////
 
 

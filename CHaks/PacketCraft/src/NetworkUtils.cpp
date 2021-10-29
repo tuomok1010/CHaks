@@ -1267,7 +1267,7 @@ tcpHeader->urg, ntohs(tcpHeader->window), ntohs(tcpHeader->check), ntohs(tcpHead
 
 int PacketCraft::ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader)
 {
-    int res = snprintf(buffer, bufferSize, "[UDP]:\nsource port: %u\ndestination port: %u\nlength: %u\nchecksum: %u, %x\n . . . . . . . . . . \n", 
+    int res = snprintf(buffer, bufferSize, "[UDP]:\nsource port: %u\ndestination port: %u\nlength: %u\nchecksum: %u, 0x%x\n . . . . . . . . . . \n", 
     ntohs(udpHeader->source), ntohs(udpHeader->dest), ntohs(udpHeader->len), ntohs(udpHeader->check), ntohs(udpHeader->check));
 
     if(res > -1 && res < (int)bufferSize)
@@ -1327,15 +1327,129 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
     }
 }
 
+// TODO: put the while(true) loops into a function or something
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;
+    uint8_t* querySection = dnsHeader->querySection;
 
-    int res = snprintf(buffer, bufferSize, "[DNS]:\nidentification: 0x%x\nflags(0x%x):\n\t\
-QR: %u, OPCODE: %u, AA: %u, TC: %u, RD: %u, RA: %u, Z: %u, RCODE: %u\n\
-number of questions: %u\nnumber of answers: %u\nnumber of authority resource records: %u\nnumber of additional authority resource records: %u",
-ntohs(dnsHeader->id), ntohs(dnsHeader->flags), dnsHeader->qr, dnsHeader->opcode, dnsHeader->aa, dnsHeader->tc, dnsHeader->rd, dnsHeader->ra,
-dnsHeader->zero, dnsHeader->rcode, ntohs(dnsHeader->qcount), ntohs(dnsHeader->ancount), ntohs(dnsHeader->nscount), ntohs(dnsHeader->adcount));
+    char dnsQuestionsDataStr[PC_DNS_MAX_DATA_STR_SIZE]{};
+    char* dnsQuestionsDataStrPtr = dnsQuestionsDataStr;
+    // converts all questions into strings and puts them in dnsQuestionsDataStr
+    for(unsigned int i = 0; i < htons(dnsHeader->qcount); ++i)
+    {
+        char qName[255]{};
+        char* qNamePtr = qName;
+
+        uint32_t numLabels = 0;
+        uint32_t nameLength = 0;
+        while(true) // fills the qName buffer with a domain name
+        {
+            uint32_t labelLength = (uint32_t)*querySection; // first byte is the length of the first label
+            ++querySection; // increment pointer to the start of the qname.
+            memcpy(qNamePtr, querySection, labelLength); // copy label into the qName buffer
+            querySection += labelLength; // will now point to the next label
+            qNamePtr += labelLength;
+
+            // append a '.' after each label
+            *qNamePtr = '.';
+            ++qNamePtr;
+
+            ++numLabels;
+            nameLength += labelLength;
+
+            // if length of next label is 0, we have reached the end of the qname string. We increment the pointer to point to the QTYPE value.
+            if((uint32_t)*querySection == 0)
+            {
+                --qNamePtr; // move pointer back because we want the last '.' character to be replaced with a '\0'
+                ++querySection;
+                break;
+            }
+        }
+
+        
+        *qNamePtr = '\0';
+
+        uint16_t qType = ntohs(*(uint16_t*)querySection);
+        querySection += 2;
+        uint16_t qClass = ntohs(*(uint16_t*)querySection);
+        querySection += 2; // ptr now points to the answers section. Used when converting answers into string
+
+        int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
+        snprintf(dnsQuestionsDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
+
+        dnsQuestionsDataStrPtr += len;
+    }
+
+    *dnsQuestionsDataStrPtr = '\0';
+
+    char dnsAnswersDataStr[PC_DNS_MAX_DATA_STR_SIZE]{};
+    char* dnsAnswersDataStrPtr = dnsAnswersDataStr;
+    // converts all answers into strings and puts them in dnsAnswersDataStr
+    for(unsigned int i = 0; i < htons(dnsHeader->ancount); ++i)
+    {
+        char aName[255]{};
+        char* aNamePtr = aName;
+
+        uint32_t numLabels = 0;
+        uint32_t nameLength = 0;
+        while(true) // fills the qName buffer with a domain name
+        {
+            uint32_t labelLength = *querySection; // first byte is the length of the first label
+            ++querySection; // increment pointer to the start of the aname.
+            memcpy(aNamePtr, querySection, labelLength); // copy label into the aName buffer
+            querySection += labelLength; // will now point to the next label size
+            aNamePtr += labelLength;
+
+            // append a '.' after each label
+            *aNamePtr = '.';
+            ++aNamePtr;
+
+            ++numLabels;
+            nameLength += labelLength;
+
+            // if length of next label is 0, we have reached the end of the aname string. We increment the pointer to point to the TYPE value.
+            if((uint32_t)*querySection == 0)
+            {
+                --aNamePtr; // move pointer back because we want the last '.' character to be replaced with a '\0'
+                ++querySection;
+                break;
+            }
+        }
+
+        *aNamePtr = '\0';
+
+        uint16_t aType = ntohs(*(uint16_t*)querySection);
+        querySection += 2;
+        uint16_t aClass = ntohs(*(uint16_t*)querySection);
+        querySection += 2;
+        uint32_t timeToLive = ntohl(*(uint32_t*)querySection);
+        querySection += 4;
+        uint16_t rLength = ntohs(*(uint16_t*)querySection);
+        querySection += 2;
+
+        char* rData = (char*)malloc(rLength + 1);
+        memcpy(rData, querySection, rLength);
+        memset(rData + rLength, '\0', 1);
+        querySection += rLength;
+
+        int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
+            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rData);
+
+        snprintf(dnsAnswersDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
+            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rData);
+
+        dnsAnswersDataStrPtr += len;
+    }
+
+    *dnsAnswersDataStrPtr = '\0';
+
+
+    int res = snprintf(buffer, bufferSize, "[DNS]:\nidentification: 0x%x\nflags(0x%x):\n\tQR: %u, OPCODE: %u, AA: %u, TC: %u, RD: %u, RA: %u, Z: %u,\
+RCODE: %u\n\nquestions: %u\nanswers: %u\nnumber of authority resource records: %u\nnumber of additional authority resource records: %u\n\n\
+questions:\n%s\n\nanswers:\n%s\n . . . . . . . . . . \n", ntohs(dnsHeader->id), ntohs(dnsHeader->flags), dnsHeader->qr, dnsHeader->opcode, dnsHeader->aa, 
+dnsHeader->tc, dnsHeader->rd, dnsHeader->ra, dnsHeader->zero, dnsHeader->rcode, ntohs(dnsHeader->qcount), ntohs(dnsHeader->ancount), 
+ntohs(dnsHeader->nscount), ntohs(dnsHeader->adcount), dnsQuestionsDataStr, dnsAnswersDataStr);
 
     if(res > -1 && res < (int)bufferSize)
     {

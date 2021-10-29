@@ -224,14 +224,15 @@ struct __attribute__((__packed__)) DNSHeader // taken from https://0x00sec.org/t
 # else
 #  error "Adjust your <bits/endian.h> defines"
 # endif
-        };
-        
+        };    
     };
 
 	uint16_t qcount;	/* question count */
 	uint16_t ancount;	/* Answer record count */
 	uint16_t nscount;	/* Name Server (Autority Record) Count */ 
 	uint16_t adcount;	/* Additional Record Count */
+
+    uint8_t querySection[];
 };
 
 struct __attribute__((__packed__)) TCPv4PseudoHeader
