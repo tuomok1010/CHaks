@@ -33,12 +33,13 @@ int CHaks::PacketSniffer::Init(const char* interfaceName)
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
         return APPLICATION_ERROR;
     }
-
+/*
     if(setsockopt(socketFd, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, PacketCraft::GetStrLen(interfaceName)) == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "setsockopt() error!");
         return APPLICATION_ERROR;
     }
+*/
 
     for(int i = 0; i < N_PROTOCOLS_SUPPORTED; ++i)
     {
@@ -83,6 +84,7 @@ int CHaks::PacketSniffer::Sniff()
     pollFds[0].fd = 0;
     pollFds[0].events = POLLIN;
 
+    // this monitors all supported packet types
     pollFds[1].fd = socketFd;
     pollFds[1].events = POLLIN;
 

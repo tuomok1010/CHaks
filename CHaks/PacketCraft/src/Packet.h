@@ -29,8 +29,9 @@ namespace PacketCraft
         // Check PCTypes.h for valid layerTypes
         int AddLayer(const uint32_t layerType, const size_t layerSize);
         int Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const;
-        int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1);
+        int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1); // negative timeout means we wait forever until a packet is received
         void ResetPacketBuffer();
+        void* FindLayerByType(const uint32_t layerType);
 
         // if printToFile is true, prints the packet into a txt file in fullFilePath, otherwise prints it in console
         int Print(bool32 printToFile = FALSE, const char* fullFilePath = "") const;

@@ -24,6 +24,8 @@ namespace CHaks
         {"DNS", PC_DNS}
     };
 
+    // NOTE: for some reason, capturing DNS responses doesn't work. Program only captures dns queries.
+    // TODO: find out why and FIX!!! 
     class PacketSniffer
     {
         public:

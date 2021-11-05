@@ -6,21 +6,22 @@
 #include <cstring>
 #include <unistd.h>
 #include <net/if.h>
+#include <arpa/inet.h>
 
 void PrintHelp(char** argv)
 {
     std::cout
         << "To use the program, provide the arguments in the following format:\n"
-        << argv[0] << " <interface name> <ip version> <target ip> <domain>\n\n"
+        << argv[0] << " <interface name> <target ip> <fake domain ip> <domain>\n\n"
         << "<interface name>: the interface you wish to use.\n"
-        << "<ip version>: your ip version, must be 4 or 6\n"
         << "<target ip>: ip address of the target you wish to fool\n"
-        << "<full domain>: internet address you wish to spoof\n\n"
-        << "Example: " << argv[0] << " eth0 " << "4 " << "10.0.2.33 " << "https://www.google.com/" << std::endl;
+        << "<fake domain ip>: ip that you want the target to think the domain is at\n"
+        << "<full domain name>: internet address you wish to spoof\n\n"
+        << "Example: " << argv[0] << " eth0 "<< "10.0.2.33 " << "10.0.2.5 " << "https://www.google.com/" << std::endl;
 }
 
 // TODO: improve args processing
-int ProcessArgs(int argc, char** argv, char* interfaceName, IPVersion& ipVersion, char* targetIP, char* domain)
+int ProcessArgs(int argc, char** argv, char* interfaceName, char* targetIP, char* fakeDomainIP, char* domain)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -36,19 +37,15 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, IPVersion& ipVersion
 
     PacketCraft::CopyStr(interfaceName, IFNAMSIZ, argv[1]);
 
-
-    if(PacketCraft::CompareStr(argv[2], "4") == TRUE)
-        ipVersion = IPVersion::IPV4;
-    else if(PacketCraft::CompareStr(argv[2], "6") == TRUE)
-        ipVersion = IPVersion::IPV6;
-    else
+    if(PacketCraft::GetStrLen(argv[2]) > INET6_ADDRSTRLEN)
         return APPLICATION_ERROR;
-
+    else
+        PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[2]);
 
     if(PacketCraft::GetStrLen(argv[3]) > INET6_ADDRSTRLEN)
         return APPLICATION_ERROR;
     else
-        PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[3]);
+        PacketCraft::CopyStr(fakeDomainIP, INET6_ADDRSTRLEN, argv[3]);
 
 
     if(PacketCraft::GetStrLen(argv[4]) > FQDN_MAX_STR_LEN)
@@ -62,34 +59,72 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, IPVersion& ipVersion
 int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
-    IPVersion ipVersion{IPVersion::NONE};
     char domain[FQDN_MAX_STR_LEN]{};
     char targetIP[INET6_ADDRSTRLEN]{};
+    char fakeDomainIP[INET6_ADDRSTRLEN]{};
 
-    if(ProcessArgs(argc, argv, interfaceName, ipVersion, targetIP, domain) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, interfaceName, targetIP, fakeDomainIP, domain) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
         return APPLICATION_ERROR;
     } 
 
-    uint16_t socketProto = ipVersion == IPVersion::IPV4 ? ETH_P_IP : ETH_P_IPV6;
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(socketProto));
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if(socketFd == -1)
     {
         LOG_ERROR(APPLICATION_ERROR, "socket() error!");
         return APPLICATION_ERROR;
     }
 
-    char myIP[INET6_ADDRSTRLEN]{};
-    if(PacketCraft::GetIPAddr(myIP, interfaceName, ipVersion == IPVersion::IPV4 ? AF_INET : AF_INET6) == APPLICATION_ERROR)
+    while(true)
     {
-        close(socketFd);
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetIPAddr() error!");
-        return APPLICATION_ERROR;
+        PacketCraft::Packet packet;
+        if(packet.Receive(socketFd, 0) == APPLICATION_ERROR)
+            continue;
+
+        DNSHeader* dnsHeader = (DNSHeader*)packet.FindLayerByType(PC_DNS);
+        if(dnsHeader != nullptr)
+        {
+            std::cout << "DNS packet found\n";
+
+            // check the ip version of the packet
+            EthHeader* ethHeader = (EthHeader*)packet.GetLayerStart(0);
+            if(ethHeader->ether_type == htons(ETH_P_IP))
+            {
+                sockaddr_in targetIPAddr{};
+                inet_pton(AF_INET, targetIP, &targetIPAddr.sin_addr);
+
+                IPv4Header* ipv4Header = (IPv4Header*)packet.GetLayerStart(1);
+                if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_src.s_addr)
+                {
+                    std::cout << "Matching IPv4 found in DNS packet\n";
+                    packet.Print();
+                }
+
+                continue;
+            }
+            else if(ethHeader->ether_type == htons(ETH_P_IPV6)) // TODO: make sure ipv6 processing code below works
+            {
+                sockaddr_in6 targetIPAddr{};
+                inet_pton(AF_INET6, targetIP, &targetIPAddr.sin6_addr);
+
+                IPv6Header* ipv6Header = (IPv6Header*)packet.GetLayerStart(1);
+                if(memcmp(targetIPAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, 16) == 0)
+                {
+                    std::cout << "Matching IPv6 found in DNS packet\n";
+                    packet.Print();
+                }
+
+                continue;
+            }
+        }
+
+        std::cout << "packet was not DNS" << std::endl;
     }
 
 
+
     close(socketFd);
-    return NO_ERROR;
+    return NO_ERROR;    
 }

@@ -185,6 +185,17 @@ void PacketCraft::Packet::ResetPacketBuffer()
     memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
+void* PacketCraft::Packet::FindLayerByType(const uint32_t layerType)
+{
+    for(unsigned int i = 0; i < nLayers; ++i)
+    {
+        if(layerInfos[i].type == layerType)
+            return layerInfos[i].start;
+    }
+
+    return nullptr;
+}
+
 int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) const
 {
     std::ofstream file;
