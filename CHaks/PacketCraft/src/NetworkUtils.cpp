@@ -1336,7 +1336,7 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     char dnsQuestionsDataStr[PC_DNS_MAX_DATA_STR_SIZE]{};
     char* dnsQuestionsDataStrPtr = dnsQuestionsDataStr;
     // converts all questions into strings and puts them in dnsQuestionsDataStr
-    for(unsigned int i = 0; i < htons(dnsHeader->qcount); ++i)
+    for(unsigned int i = 0; i < ntohs(dnsHeader->qcount); ++i)
     {
         char qName[255]{};
         char* qNamePtr = qName;
@@ -1386,7 +1386,7 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     char dnsAnswersDataStr[PC_DNS_MAX_DATA_STR_SIZE]{};
     char* dnsAnswersDataStrPtr = dnsAnswersDataStr;
     // converts all answers into strings and puts them in dnsAnswersDataStr
-    for(unsigned int i = 0; i < htons(dnsHeader->ancount); ++i)
+    for(unsigned int i = 0; i < ntohs(dnsHeader->ancount); ++i)
     {
         char aName[255]{};
         char* aNamePtr = aName;
@@ -1440,6 +1440,7 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
             aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rData);
 
         dnsAnswersDataStrPtr += len;
+        free(rData);
     }
 
     *dnsAnswersDataStrPtr = '\0';
