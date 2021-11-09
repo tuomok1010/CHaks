@@ -751,6 +751,72 @@ bool32 PacketCraft::VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_
 }
 */
 
+// converts a dns name with labels to a domain format
+int PacketCraft::DNSNameToDomain(const char* dnsName, char* domainName)
+{
+    for(int i = 0; i <= FQDN_MAX_STR_LEN; ++i)
+    {
+        if(i >= FQDN_MAX_STR_LEN)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "DNSNameToDomain() error");
+            return APPLICATION_ERROR;
+        }
+
+        uint32_t labelLength = (uint32_t)*dnsName; // first byte is the length of the first label
+        ++dnsName; // increment pointer to the start of the name.
+        memcpy(domainName, dnsName, labelLength); // copy label into the domainName buffer
+        dnsName += labelLength; // will now point to the next label
+        domainName += labelLength;
+
+        // append a '.' after each label
+        *domainName = '.';
+        ++domainName;
+
+        // if length of next label is 0, we have reached the end of the dnsName string.
+        if((uint32_t)*dnsName == 0)
+        {
+            --domainName; // move pointer back because we want the last '.' character to be replaced with a '\0'
+            break;
+        }
+    }
+
+    *domainName = '\0';
+    return NO_ERROR;
+}
+
+// converts a domain to a dns name with labels
+int PacketCraft::DomainToDNSName(const char* domainName, char* dnsName)
+{
+    uint32_t domainNameLen = GetStrLen(domainName);
+    if(domainNameLen >= FQDN_MAX_STR_LEN)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "DomainToDNSName() error");
+        return APPLICATION_ERROR;
+    }
+
+    for(unsigned int i = 0; i < domainNameLen; ++i)
+    {
+        int labelLength = FindInStr(domainName, "."); // find the index of the '.' char. This is also the length of the label
+        std::cout << i << "th label length is " << labelLength << std::endl;
+        if(labelLength == -1) // we are at the final label
+        {
+            labelLength = GetStrLen(domainName);
+            *dnsName++ = labelLength;
+            memcpy(dnsName, domainName, labelLength);
+            dnsName += labelLength;
+            *dnsName = '\0';
+            break;
+        }
+
+        *dnsName++ = labelLength; // add label length to the dnsName and increment dnsName pointer
+        memcpy(dnsName, domainName, labelLength); // copy label to dnsName
+        dnsName += labelLength; // increment dns name pointer, it now points to the next label length
+        domainName += labelLength + 1;
+    }
+
+    return NO_ERROR;
+}
+
 int PacketCraft::PrintIPAddr(const sockaddr_storage& addr, const char* prefix, const char* suffix)
 {
     int result{APPLICATION_ERROR};

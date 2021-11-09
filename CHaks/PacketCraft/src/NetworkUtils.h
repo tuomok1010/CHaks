@@ -76,6 +76,11 @@ namespace PacketCraft
     bool32 VerifyChecksum(void* data, size_t sizeInBytes);
     //////////////////////////////////////////////////////////////////////////////////////
 
+    // converts a dns name with labels to a domain format
+    int DNSNameToDomain(const char* dnsName, char* domainName);
+
+    // converts a domain to a dns name with labels
+    int DomainToDNSName(const char* domainName, char* dnsName);
 
     // Print/Convert to string functions
     int PrintIPAddr(const sockaddr_storage& addr, const char* prefix = "", const char* suffix = "");
