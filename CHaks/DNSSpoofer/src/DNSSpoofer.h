@@ -16,6 +16,10 @@ namespace CHaks
             PacketCraft::Packet& dnsResponsePacket, char* fakeDomainIP, const PacketCraft::DNSQuestion& question);
 
         private:
+        int CreateEthHeader(EthHeader& dnsResponseEthHeader, const EthHeader& dnsRequestEthHeader);
+        int CreateIPv4Header(IPv4Header& dnsResponseIPv4Header, const IPv4Header& dnsRequestHeader);
+        int CreateUDPHeader(UDPHeader& dnsResponseUDPHeader, const UDPHeader& dnsRequestUDPHeader);
+        int CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DNSHeader& dnsRequestDNSHeader, const PacketCraft::DNSQuestion& question, char* fakeDomainIP);
         PacketCraft::DNSParser dnsParser;
     };
 }

@@ -754,18 +754,12 @@ bool32 PacketCraft::VerifyTCPv4Checksum(void* ipv4Header, void* tcpHeader, size_
 // converts a dns name with labels to a domain format
 int PacketCraft::DNSNameToDomain(const char* dnsName, char* domainName)
 {
-    for(int i = 0; i <= FQDN_MAX_STR_LEN; ++i)
+    while(true)
     {
-        if(i >= FQDN_MAX_STR_LEN)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "DNSNameToDomain() error");
-            return APPLICATION_ERROR;
-        }
-
         uint32_t labelLength = (uint32_t)*dnsName; // first byte is the length of the first label
         ++dnsName; // increment pointer to the start of the name.
         memcpy(domainName, dnsName, labelLength); // copy label into the domainName buffer
-        dnsName += labelLength; // will now point to the next label
+        dnsName += labelLength; // will now point to the next label length
         domainName += labelLength;
 
         // append a '.' after each label
@@ -797,7 +791,6 @@ int PacketCraft::DomainToDNSName(const char* domainName, char* dnsName)
     for(unsigned int i = 0; i < domainNameLen; ++i)
     {
         int labelLength = FindInStr(domainName, "."); // find the index of the '.' char. This is also the length of the label
-        std::cout << i << "th label length is " << labelLength << std::endl;
         if(labelLength == -1) // we are at the final label
         {
             labelLength = GetStrLen(domainName);

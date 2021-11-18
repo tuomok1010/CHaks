@@ -61,6 +61,18 @@ int main(int argc, char** argv)
     char targetIP[INET6_ADDRSTRLEN]{};
     char fakeDomainIP[INET6_ADDRSTRLEN]{};
 
+/*
+    const char* domainTest = "www.test.bing.co.uk";
+    char buf[FQDN_MAX_STR_LEN]{};
+    PacketCraft::DomainToDNSName(domainTest, buf);
+    std::cout << domainTest << " converted to " << buf << "\n";
+    char buf2[FQDN_MAX_STR_LEN]{};
+    PacketCraft::DNSNameToDomain(buf, buf2);
+    std::cout << buf << " converted to " << buf2 << "\n";
+    return 0;
+*/
+
+
     if(ProcessArgs(argc, argv, interfaceName, targetIP, fakeDomainIP, domain) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");

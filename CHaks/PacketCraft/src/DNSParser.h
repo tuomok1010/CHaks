@@ -15,6 +15,37 @@
 
 namespace PacketCraft
 {
+    struct __attribute__((__packed__)) ParsedDNSHeader // NOTE: almost the same as the DNS header in PCHeaders.h
+    {
+        uint16_t id;
+    # if __BYTE_ORDER == __BIG_ENDIAN
+        uint16_t qr:1;
+        uint16_t opcode:4;
+        uint16_t aa:1;
+        uint16_t tc:1;
+        uint16_t rd:1;
+        uint16_t ra:1;
+        uint16_t zero:3;
+        uint16_t rcode:4;
+    # elif __BYTE_ORDER == __LITTLE_ENDIAN
+        uint16_t rd:1;
+        uint16_t tc:1;
+        uint16_t aa:1;
+        uint16_t opcode:4;
+        uint16_t qr:1;
+        uint16_t rcode:4;
+        uint16_t zero:3;
+        uint16_t ra:1;
+    # else
+    #  error "Adjust your <bits/endian.h> defines"
+    # endif
+
+        uint16_t qcount;	/* question count */
+        uint16_t ancount;	/* Answer record count */
+        uint16_t nscount;	/* Name Server (Autority Record) Count */ 
+        uint16_t adcount;	/* Additional Record Count */
+    };
+
     struct DNSQuestion
     {
         char qName[FQDN_MAX_STR_LEN];
@@ -22,7 +53,6 @@ namespace PacketCraft
         uint16_t qClass;
     };
 
-    // IMPORTANT: remember to free() rData
     struct DNSAnswer
     {
         char aName[FQDN_MAX_STR_LEN];
@@ -40,13 +70,21 @@ namespace PacketCraft
 
         ~DNSParser();
 
-        void Parse(const DNSHeader& dnsHeader);
+        // parses data in host byte order, and the domain names in a clear string format, for example: www.google.com
+        void ParseToHostFormat(const DNSHeader& dnsHeader);
 
-        uint32_t nQuestions;
-        uint32_t nAnswers;
+        // parses data in network byte order, and the domain names in dns format with labels for example: 3www6google3com
+        void ParseToNetworkFormat(const DNSHeader& dnsHeader);
+
+        void PrintQueries();
+
+        ParsedDNSHeader header;
         DNSQuestion* questionsArray;
         DNSAnswer* answersArray;
-        const DNSHeader* header;
+
+        private:
+        void FreeData();
+        bool32 parsedToNetworkFormat;
     };
 }
 
