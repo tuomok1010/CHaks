@@ -4,15 +4,6 @@
 #include "PCTypes.h"
 #include "PCHeaders.h"
 
-// TODO: should we take advantage of DNSParser in NetworkUtils::ConvertDNSLayerToString()? 
-// Lots of same code there as in DNSParser::Parse()
-
-// TODO: parse questions and answers in network byte order? or add an option to do both host byte order and network byte order
-// maybe add functions like "ParseToHostByteOrder() and ParseToNetworkByteOrder()"
-
-// TODO: store qName and aName in dns label format(wwwbingcom) instead of a regular string (www.google.com), 
-// also dynamically allocate memory for these names  instead of using a buffer with a prefixed length
-
 namespace PacketCraft
 {
     struct __attribute__((__packed__)) ParsedDNSHeader // NOTE: almost the same as the DNS header in PCHeaders.h

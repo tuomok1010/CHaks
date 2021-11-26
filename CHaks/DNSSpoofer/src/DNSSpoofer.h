@@ -13,13 +13,14 @@ namespace CHaks
 
         int Spoof(int socketFd, const char* interfaceName, char* targetIP, char* domain, char* fakeDomainIP);
         int CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPacket, PacketCraft::Packet& dnsResponsePacket, char* fakeDomainIP, 
-            const PacketCraft::DNSQuestion& question);
+            IPVersion ipVersion, const PacketCraft::DNSQuestion& question);
 
         private:
         int CreateEthHeader(EthHeader& dnsResponseEthHeader, const EthHeader& dnsRequestEthHeader);
         int CreateIPv4Header(IPv4Header& dnsResponseIPv4Header, const IPv4Header& dnsRequestHeader);
         int CreateUDPHeader(UDPHeader& dnsResponseUDPHeader, const UDPHeader& dnsRequestUDPHeader);
-        int CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DNSHeader& dnsRequestDNSHeader, const PacketCraft::DNSQuestion& question, char* fakeDomainIP);
+        int CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DNSHeader& dnsRequestDNSHeader, const PacketCraft::DNSQuestion& question, 
+            char* fakeDomainIP, IPVersion ipVersion);
         PacketCraft::DNSParser dnsParser;
     };
 }

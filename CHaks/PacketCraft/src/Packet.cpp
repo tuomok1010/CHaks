@@ -88,8 +88,10 @@ int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSi
 
 int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const
 {
+    std::cout << "trying to send " << sizeInBytes << " bytes" << "\n";
     int bytesSent{};
     bytesSent = sendto(socket, data, sizeInBytes, flags, dst, dstSize);
+    std::cout << "bytes sent: " << bytesSent << std::endl;
     if(bytesSent != sizeInBytes)
     {
         // LOG_ERROR(APPLICATION_ERROR, "sendto() error!");

