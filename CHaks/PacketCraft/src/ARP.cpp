@@ -90,14 +90,7 @@ int PacketCraft::ARPPacket::Send(const int socket, const char* interfaceName) co
         return APPLICATION_ERROR;
     }
 
-    sockaddr_ll sockAddr;
-    sockAddr.sll_family = PF_PACKET;
-    sockAddr.sll_protocol = htons(ETH_P_ARP);
-    sockAddr.sll_ifindex = ifIndex;
-    sockAddr.sll_hatype = htons(ARPHRD_ETHER);
-    sockAddr.sll_halen = ETH_ALEN;
-
-    return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
+    return Packet::Send(socket, interfaceName, 0);
 }
 
 void PacketCraft::ARPPacket::ResetPacketBuffer()

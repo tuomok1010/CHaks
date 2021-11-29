@@ -3,7 +3,6 @@
 #include "NetworkUtils.h"
 #include "ARP.h"
 
-// general C++ stuff
 #include <iostream>
 #include <fstream>
 
@@ -13,6 +12,8 @@
 
 #include <netinet/ether.h>
 #include <netinet/ip.h>
+#include <linux/if_packet.h>
+#include <net/if.h>
 
 PacketCraft::Packet::Packet():
     data(nullptr),
@@ -86,12 +87,33 @@ int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSi
     return NO_ERROR;
 }
 
-int PacketCraft::Packet::Send(const int socket, const int flags, const sockaddr* dst, const size_t dstSize) const
+int PacketCraft::Packet::Send(const int socket, const char* interfaceName, const int flags) const
 {
-    std::cout << "trying to send " << sizeInBytes << " bytes" << "\n";
+    int ifIndex = if_nametoindex(interfaceName);
+    if(ifIndex == 0)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "if_nametoindex() error!");
+        return APPLICATION_ERROR;
+    }
+
+    EthHeader* ethHeader = (EthHeader*)FindLayerByType(PC_ETHER_II);
+    if(ethHeader == nullptr)
+    {
+        // LOG_ERROR(APPLICATION_ERROR, "EthHeader not found");
+        return APPLICATION_ERROR;
+    }
+
+    sockaddr_ll sockAddr{};
+    sockAddr.sll_family = PF_PACKET;
+    sockAddr.sll_protocol = ethHeader->ether_type;
+    sockAddr.sll_ifindex = ifIndex;
+    sockAddr.sll_halen = ETH_ALEN;
+    sockAddr.sll_hatype = htons(ARPHRD_ETHER);
+    memcpy(sockAddr.sll_addr, ethHeader->ether_shost, ETH_ALEN);
+
     int bytesSent{};
-    bytesSent = sendto(socket, data, sizeInBytes, flags, dst, dstSize);
-    std::cout << "bytes sent: " << bytesSent << std::endl;
+    bytesSent = sendto(socket, data, sizeInBytes, flags, (sockaddr*)&sockAddr, sizeof(sockAddr));
+    // std::cout << "bytes sent: " << bytesSent << std::endl;
     if(bytesSent != sizeInBytes)
     {
         // LOG_ERROR(APPLICATION_ERROR, "sendto() error!");
@@ -187,7 +209,7 @@ void PacketCraft::Packet::ResetPacketBuffer()
     memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
-void* PacketCraft::Packet::FindLayerByType(const uint32_t layerType)
+void* PacketCraft::Packet::FindLayerByType(const uint32_t layerType) const
 {
     for(unsigned int i = 0; i < nLayers; ++i)
     {

@@ -104,15 +104,7 @@ int PacketCraft::IPv4PingPacket::Send(const int socket, const char* interfaceNam
         return APPLICATION_ERROR;
     }
 
-    sockaddr_ll sockAddr{};
-    sockAddr.sll_family = PF_PACKET;
-    sockAddr.sll_protocol = htons(ETH_P_IP);
-    sockAddr.sll_ifindex = ifIndex;
-    sockAddr.sll_halen = ETH_ALEN;
-    sockAddr.sll_hatype = htons(ARPHRD_ETHER);
-    memcpy(sockAddr.sll_addr, ethHeader->ether_shost, ETH_ALEN);
-
-    return Packet::Send(socket, 0, (sockaddr*)&sockAddr, sizeof(sockAddr));
+    return Packet::Send(socket, interfaceName, 0);
 }
 
 void PacketCraft::IPv4PingPacket::ResetPacketBuffer()

