@@ -41,25 +41,29 @@
 // NOTE: used as the default protocol in PacketCraft::Packet::ProcessReceivedPacket
 #define PC_PROTO_ETH        UINT16_MAX
 
-// Supported link/internet layer protocols
+// Supported link/internet layer protocols, used mostly in PacketCraft::Packet class
 #define PC_NONE             0x0000
 #define PC_ETHER_II         0x0001
 #define PC_ARP              0x0002
 #define PC_IPV4             0x0003
 #define PC_IPV6             0x0004
 
-// Supported payload protocols
+// Supported payload protocols, used mostly in PacketCraft::Packet class
 #define PC_ICMPV4           0x0005
 #define PC_ICMPV6           0x0006
 #define PC_TCP              0x0007
 #define PC_TCP_OPTIONS      0x0008
 #define PC_UDP              0x0009
 
-// Supported application layer protocols. Used in NetworkUtils GetTCPDataProtocol and GetUDPDataProtocol
-#define PC_HTTP             0x000a
-#define PC_DNS              0x000b
+// Supported application layer protocols, used mostly in PacketCraft::Packet class
+#define PC_HTTP_REQUEST     0x000a
+#define PC_HTTP_RESPONSE    0x000b
+#define PC_DNS              0x000c
 /////////////////////////////////////////////////////
 
+// Supported HTTP methods, used in NetworkUtils GetHTTPMethod()
+#define PC_HTTP_POST        0x000d
+#define PC_HTTP_HEAD        0x000e
 
 
 #define PC_MAX_LAYERS       10

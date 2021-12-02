@@ -55,11 +55,12 @@ uint32_t PacketCraft::NetworkProtoToPacketCraftProto(unsigned short networkProto
 // TODO: finish and test
 uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader)
 {
-    // check for HTTP
-    if(ntohs(tcpHeader->source) == 80 || ntohs(tcpHeader->dest) == 80)
-        return PC_HTTP;
+    if(ntohs(tcpHeader->source) == 80)
+        return PC_HTTP_RESPONSE;
+    
+    else if(ntohs(tcpHeader->dest) == 80)
+        return PC_HTTP_REQUEST;
 
-    // check for DNS
     if(ntohs(tcpHeader->source) == 53 || ntohs(tcpHeader->dest) == 53)
         return PC_DNS;
 
@@ -68,9 +69,14 @@ uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader)
 
 uint32_t PacketCraft::GetUDPDataProtocol(UDPHeader* udpHeader)
 {
-    if(ntohs(udpHeader->dest) == 53 || ntohs(udpHeader->source == 53))
+    if(ntohs(udpHeader->dest) == 53 || ntohs(udpHeader->source) == 53)
         return PC_DNS;
 
+    return PC_NONE;
+}
+
+uint32_t PacketCraft::GetHTTPMethod(uint8_t* payloadData)
+{
     return PC_NONE;
 }
 
@@ -1354,7 +1360,9 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
     char dataAsCharsStr[PC_TCP_MAX_DATA_STR_SIZE]{};
     char* dataStrPtr = dataStr;
     char* dataAsCharsPtr = dataAsCharsStr;
-    uint32_t newLineAt = 15;
+    uint32_t newLineAt{15};
+    uint32_t dataStrSizeUsed{0};
+    uint32_t dataAsCharsStrSizeUsed{0};
 
     for(unsigned int i = 0; i < dataSize; ++i)
     {
@@ -1367,6 +1375,20 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
         ++dataPtr;
         dataStrPtr += dataLen;
         dataAsCharsPtr += dataAsCharsLen;
+
+        dataStrSizeUsed += dataLen;
+        dataAsCharsStrSizeUsed += dataAsCharsLen;
+
+        if((dataStrSizeUsed + 2) > PC_TCP_MAX_DATA_STR_SIZE)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "dataStr buffer too small!");
+            return APPLICATION_ERROR;
+        }
+        if((dataAsCharsStrSizeUsed + 2) > PC_TCP_MAX_DATA_STR_SIZE)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "dataAsCharsStr buffer too small!");
+            return APPLICATION_ERROR;
+        }
 
         if(i != 0 && i % newLineAt == 0)
         {

@@ -19,7 +19,8 @@ namespace PacketCraft
         {PC_ICMPV6, "ICMPV6"},
         {PC_TCP, "TCP"},
         {PC_UDP, "UDP"},
-        {PC_HTTP, "HTTP"},
+        {PC_HTTP_REQUEST, "HTTP_REQUEST"},
+        {PC_HTTP_RESPONSE, "HTTP_RESPONSE"},
         {PC_DNS, "DNS"}
     };
 
@@ -29,6 +30,8 @@ namespace PacketCraft
 
     uint32_t GetTCPDataProtocol(TCPHeader* tcpHeader);
     uint32_t GetUDPDataProtocol(UDPHeader* udpHeader);
+
+    uint32_t GetHTTPMethod(uint8_t* payloadData);
 
     int GetMACAddr(ether_addr& ethAddr, const char* interfaceName, const int socketFd);
     int GetMACAddr(ether_addr& ethAddr, const int interfaceIndex, const int socketFd);

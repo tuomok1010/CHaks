@@ -468,7 +468,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 
                 break;
             }
-            case PC_HTTP:
+            case PC_HTTP_RESPONSE:
+            case PC_HTTP_REQUEST:
             {
                 uint32_t dataSize = GetLayerSize(i);
                 uint8_t* data = (uint8_t*)GetLayerStart(i);
@@ -647,9 +648,15 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
             break;
         }
         // PAYLOAD DATA PROTOCOLS:
-        case PC_HTTP:
+        case PC_HTTP_REQUEST:
         {
-            AddLayer(PC_HTTP, layerSize);
+            AddLayer(PC_HTTP_REQUEST, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+            return NO_ERROR;
+        }
+        case PC_HTTP_RESPONSE:
+        {
+            AddLayer(PC_HTTP_RESPONSE, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
             return NO_ERROR;
         }

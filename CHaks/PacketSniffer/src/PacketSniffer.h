@@ -4,8 +4,8 @@
 #include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 #include <unordered_map>
 
-#define N_PROTOCOLS_SUPPORTED   4
-#define PROTOCOL_NAME_SIZE      10
+#define N_PROTOCOLS_SUPPORTED   11
+#define PROTOCOL_NAME_SIZE      20
 #define PATH_MAX_SIZE           500
 
 namespace CHaks
@@ -20,12 +20,11 @@ namespace CHaks
         {"ICMPV6", PC_ICMPV6},
         {"TCP", PC_TCP},
         {"UDP", PC_UDP},
-        {"HTTP", PC_HTTP},
+        {"HTTP_REQUEST", PC_HTTP_REQUEST},
+        {"HTTP_RESPONSE", PC_HTTP_RESPONSE},
         {"DNS", PC_DNS}
     };
 
-    // NOTE: for some reason, capturing DNS responses doesn't work. Program only captures dns queries.
-    // TODO: find out why and FIX!!! 
     class PacketSniffer
     {
         public:
