@@ -112,6 +112,8 @@ namespace PacketCraft
     int ConvertUDPLayerToString(char* buffer, size_t bufferSize, UDPHeader* udpHeader);
     int ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
     int ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
+
+    uint8_t* ParseDomainName(char* domainNameStr, uint32_t& numLabels, uint32_t& nameLength, uint8_t* domainNameInDNSHeader);
     //////////////////////////////////////////////////////////////////////////////////////
 
 }

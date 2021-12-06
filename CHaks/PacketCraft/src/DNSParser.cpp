@@ -50,6 +50,7 @@ void PacketCraft::DNSParser::FreeData()
     parsedToNetworkFormat = FALSE;
 }
 
+// TODO: support label compression! check: http://www.tcpipguide.com/free/t_DNSNameNotationandMessageCompressionTechnique-2.htm
 void PacketCraft::DNSParser::ParseToHostFormat(const DNSHeader& dnsHeader)
 {
     FreeData();

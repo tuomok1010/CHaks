@@ -1412,7 +1412,41 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
     }
 }
 
-// TODO: rData doesn't print correctly, fix
+/*
+fills domainNameStr with a domain name (for example: www.bing.com). Fills numLabels with the number of labels in the domain name.
+Fills nameLength with the number of characters in labels. Returns a pointer past the domain name in domainNameInDNSHeader, this pointer
+now points to the qType value.
+*/
+uint8_t* PacketCraft::ParseDomainName(char* domainNameStr, uint32_t& numLabels, uint32_t& nameLength, uint8_t* domainNameInDNSHeader)
+{
+    char* domainNameStrPtr = domainNameStr;
+    numLabels = 0;
+    nameLength = 0;
+    while(true)
+    {
+        uint32_t labelLength = (uint32_t)*domainNameInDNSHeader; // first byte in domainNameInDNSHeader is the length of the first label
+        if(labelLength == 0)
+        {
+            ++domainNameInDNSHeader;
+            --domainNameStr;
+            *domainNameStrPtr = '\0';
+            return domainNameInDNSHeader;
+        }
+
+        ++domainNameInDNSHeader; // increment pointer past the label length and to the start of the label in dns header.
+        
+        memcpy(domainNameStrPtr, domainNameInDNSHeader, labelLength); // copy new label into the qName
+        domainNameInDNSHeader += labelLength; // will now point to the next label length
+        domainNameStrPtr += labelLength; // will point at the end of the currently copied name (one past final letter)
+        *domainNameStrPtr = '.'; // append each label with a .
+        ++domainNameStrPtr;
+
+        nameLength += labelLength;
+        ++numLabels;
+    }
+}
+
+// TODO: support label compression! check: http://www.tcpipguide.com/free/t_DNSNameNotationandMessageCompressionTechnique-2.htm
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;
@@ -1420,45 +1454,38 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
 
     char dnsQuestionsDataStr[PC_DNS_MAX_DATA_STR_SIZE]{};
     char* dnsQuestionsDataStrPtr = dnsQuestionsDataStr;
+
     // converts all questions into strings and puts them in dnsQuestionsDataStr
     for(unsigned int i = 0; i < ntohs(dnsHeader->qcount); ++i)
-    {
+    {    
         char qName[FQDN_MAX_STR_LEN]{};
-        char* qNamePtr = qName;
+        uint32_t numLabels{0};
+        uint32_t nameLength{0};
 
-        uint32_t numLabels = 0;
-        uint32_t nameLength = 0;
-        while(true) // fills the qName buffer with a domain name
+        uint16_t labelLength = (uint16_t)*querySection; // first byte in querySection is the length of the first label
+        if(labelLength >= 192) // label is compressed
         {
-            uint32_t labelLength = (uint32_t)*querySection; // first byte is the length of the first label
-            ++querySection; // increment pointer to the start of the qname.
-            memcpy(qNamePtr, querySection, labelLength); // copy label into the qName buffer
-            querySection += labelLength; // will now point to the next label
-            qNamePtr += labelLength;
-
-            // append a '.' after each label
-            *qNamePtr = '.';
-            ++qNamePtr;
-
-            ++numLabels;
-            nameLength += labelLength;
-
-            // if length of next label is 0, we have reached the end of the qname string. We increment the pointer to point to the QTYPE value.
-            if((uint32_t)*querySection == 0)
-            {
-                --qNamePtr; // move pointer back because we want the last '.' character to be replaced with a '\0'
-                ++querySection;
-                break;
-            }
+            uint16_t* querySection16 = (uint16_t*)querySection;
+            uint16_t nameOffset = ntohs(*querySection16);
+            nameOffset = nameOffset & 0b0011111111111111;
+            uint8_t* domainName = data + nameOffset;
+            ParseDomainName(qName, numLabels, nameLength, domainName);
+            querySection += 2;
         }
-
-        
-        *qNamePtr = '\0';
+        else if(labelLength <= 63) // label is not compressed
+        {
+            querySection = ParseDomainName(qName, numLabels, nameLength, querySection);
+        }
+        else
+        {
+            LOG_ERROR(APPLICATION_ERROR, "invalid labelLength");
+            return APPLICATION_ERROR;
+        }
 
         uint16_t qType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
         uint16_t qClass = ntohs(*(uint16_t*)querySection);
-        querySection += 2; // ptr now points to the answers section. Used when converting answers into string
+        querySection += 2; // ptr now points to the answers section
 
         int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
         snprintf(dnsQuestionsDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
@@ -1474,35 +1501,28 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     for(unsigned int i = 0; i < ntohs(dnsHeader->ancount); ++i)
     {
         char aName[FQDN_MAX_STR_LEN]{};
-        char* aNamePtr = aName;
-
         uint32_t numLabels = 0;
         uint32_t nameLength = 0;
-        while(true) // fills the qName buffer with a domain name
+
+        uint32_t labelLength = (uint32_t)*querySection; // first byte in querySection is the length of the first label
+        if(labelLength >= 192) // label is compressed
         {
-            uint32_t labelLength = *querySection; // first byte is the length of the first label
-            ++querySection; // increment pointer to the start of the aname.
-            memcpy(aNamePtr, querySection, labelLength); // copy label into the aName buffer
-            querySection += labelLength; // will now point to the next label size
-            aNamePtr += labelLength;
-
-            // append a '.' after each label
-            *aNamePtr = '.';
-            ++aNamePtr;
-
-            ++numLabels;
-            nameLength += labelLength;
-
-            // if length of next label is 0, we have reached the end of the aname string. We increment the pointer to point to the TYPE value.
-            if((uint32_t)*querySection == 0)
-            {
-                --aNamePtr; // move pointer back because we want the last '.' character to be replaced with a '\0'
-                ++querySection;
-                break;
-            }
+            uint16_t* querySection16 = (uint16_t*)querySection;
+            uint16_t nameOffset = ntohs(*querySection16);
+            nameOffset = nameOffset & 0b0011111111111111;
+            uint8_t* domainName = data + nameOffset;
+            ParseDomainName(aName, numLabels, nameLength, domainName);
+            querySection += 2;
         }
-
-        *aNamePtr = '\0';
+        else if(labelLength <= 63) // label is not compressed
+        {
+            querySection = ParseDomainName(aName, numLabels, nameLength, querySection);
+        }
+        else
+        {
+            LOG_ERROR(APPLICATION_ERROR, "invalid labelLength");
+            return APPLICATION_ERROR;
+        }
 
         uint16_t aType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
