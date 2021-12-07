@@ -1412,41 +1412,80 @@ int PacketCraft::ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8
     }
 }
 
-/*
-fills domainNameStr with a domain name (for example: www.bing.com). Fills numLabels with the number of labels in the domain name.
-Fills nameLength with the number of characters in labels. Returns a pointer past the domain name in domainNameInDNSHeader, this pointer
-now points to the qType value.
-*/
-uint8_t* PacketCraft::ParseDomainName(char* domainNameStr, uint32_t& numLabels, uint32_t& nameLength, uint8_t* domainNameInDNSHeader)
+uint8_t* PacketCraft::ParseDomainName(char* domainNameStr, uint8_t* domainName, uint8_t* startOfHeader)
 {
     char* domainNameStrPtr = domainNameStr;
-    numLabels = 0;
-    nameLength = 0;
+    bool32 isCompressed{FALSE};
+    uint8_t* compressedDomainName{nullptr}; // used if label compression is present
+
     while(true)
     {
-        uint32_t labelLength = (uint32_t)*domainNameInDNSHeader; // first byte in domainNameInDNSHeader is the length of the first label
+        uint32_t labelLength = (uint32_t)*domainName; // first byte is the length of the first label
+        if(isCompressed == TRUE) // if the label has been compressed, we need to get the label length from the other memory location
+            labelLength = (uint32_t)*compressedDomainName;
+
         if(labelLength == 0)
         {
-            ++domainNameInDNSHeader;
-            --domainNameStr;
+            if(isCompressed == FALSE)
+                ++domainName;
+            else
+                domainName += 2;
+
+            
+            --domainNameStrPtr;
             *domainNameStrPtr = '\0';
-            return domainNameInDNSHeader;
+            return domainName;
+        }
+        else if(labelLength >= 192) // label is compressed
+        {
+            uint16_t* nameOffsetPtr16{nullptr};
+
+            if(isCompressed == FALSE) // not yet a nested compression
+                nameOffsetPtr16 = (uint16_t*)domainName;
+
+            else // this is a nested compression
+                nameOffsetPtr16 = (uint16_t*)compressedDomainName;
+
+            uint16_t nameOffset = ntohs(*nameOffsetPtr16);
+            nameOffset = nameOffset & 0b0011111111111111;
+            compressedDomainName = startOfHeader + nameOffset;
+            isCompressed = TRUE;
+            continue;
+        }
+        else if(labelLength <= 63) // label is not compressed
+        {
+            if(isCompressed == FALSE)
+                ++domainName; // increment pointer past the label length and to the start of the label
+            else
+                ++compressedDomainName; // increment pointer past the label length and to the start of the label
+        }
+        else
+        {
+            LOG_ERROR(APPLICATION_ERROR, "invalid labelLength");
+            return nullptr;
         }
 
-        ++domainNameInDNSHeader; // increment pointer past the label length and to the start of the label in dns header.
-        
-        memcpy(domainNameStrPtr, domainNameInDNSHeader, labelLength); // copy new label into the qName
-        domainNameInDNSHeader += labelLength; // will now point to the next label length
-        domainNameStrPtr += labelLength; // will point at the end of the currently copied name (one past final letter)
-        *domainNameStrPtr = '.'; // append each label with a .
-        ++domainNameStrPtr;
+        if(isCompressed == FALSE)
+        {
+            memcpy(domainNameStrPtr, domainName, labelLength); // copy new label into the qName
+            domainName += labelLength; // will now point to the next label length
+            domainNameStrPtr += labelLength; // will point at the end of the currently copied name (one past final letter)
+            *domainNameStrPtr = '.'; // append each label with a .
+            ++domainNameStrPtr;
+        }
+        else
+        {
+            memcpy(domainNameStrPtr, compressedDomainName, labelLength); // copy new label into the qName
+            compressedDomainName += labelLength; // will now point to the next label length
+            domainNameStrPtr += labelLength; // will point at the end of the currently copied name (one past final letter)
+            *domainNameStrPtr = '.'; // append each label with a .
+            ++domainNameStrPtr;
+        }
 
-        nameLength += labelLength;
-        ++numLabels;
     }
 }
 
-// TODO: support label compression! check: http://www.tcpipguide.com/free/t_DNSNameNotationandMessageCompressionTechnique-2.htm
+
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;
@@ -1459,36 +1498,16 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     for(unsigned int i = 0; i < ntohs(dnsHeader->qcount); ++i)
     {    
         char qName[FQDN_MAX_STR_LEN]{};
-        uint32_t numLabels{0};
-        uint32_t nameLength{0};
 
-        uint16_t labelLength = (uint16_t)*querySection; // first byte in querySection is the length of the first label
-        if(labelLength >= 192) // label is compressed
-        {
-            uint16_t* querySection16 = (uint16_t*)querySection;
-            uint16_t nameOffset = ntohs(*querySection16);
-            nameOffset = nameOffset & 0b0011111111111111;
-            uint8_t* domainName = data + nameOffset;
-            ParseDomainName(qName, numLabels, nameLength, domainName);
-            querySection += 2;
-        }
-        else if(labelLength <= 63) // label is not compressed
-        {
-            querySection = ParseDomainName(qName, numLabels, nameLength, querySection);
-        }
-        else
-        {
-            LOG_ERROR(APPLICATION_ERROR, "invalid labelLength");
-            return APPLICATION_ERROR;
-        }
+        querySection = ParseDomainName(qName, querySection, data);
 
         uint16_t qType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
         uint16_t qClass = ntohs(*(uint16_t*)querySection);
         querySection += 2; // ptr now points to the answers section
 
-        int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
-        snprintf(dnsQuestionsDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, nameLength, numLabels, qType, qClass);
+        int len = snprintf(NULL, 0, "name: %s\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, qType, qClass);
+        snprintf(dnsQuestionsDataStrPtr, len + 1, "name: %s\nqtype: 0x%x\nqclass: 0x%x\n\n", qName, qType, qClass);
 
         dnsQuestionsDataStrPtr += len;
     }
@@ -1501,28 +1520,8 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
     for(unsigned int i = 0; i < ntohs(dnsHeader->ancount); ++i)
     {
         char aName[FQDN_MAX_STR_LEN]{};
-        uint32_t numLabels = 0;
-        uint32_t nameLength = 0;
 
-        uint32_t labelLength = (uint32_t)*querySection; // first byte in querySection is the length of the first label
-        if(labelLength >= 192) // label is compressed
-        {
-            uint16_t* querySection16 = (uint16_t*)querySection;
-            uint16_t nameOffset = ntohs(*querySection16);
-            nameOffset = nameOffset & 0b0011111111111111;
-            uint8_t* domainName = data + nameOffset;
-            ParseDomainName(aName, numLabels, nameLength, domainName);
-            querySection += 2;
-        }
-        else if(labelLength <= 63) // label is not compressed
-        {
-            querySection = ParseDomainName(aName, numLabels, nameLength, querySection);
-        }
-        else
-        {
-            LOG_ERROR(APPLICATION_ERROR, "invalid labelLength");
-            return APPLICATION_ERROR;
-        }
+        querySection = ParseDomainName(aName, querySection, data);
 
         uint16_t aType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
@@ -1536,24 +1535,50 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
         char rDataStr[1024]{}; // TODO: make a define for the size?
         char* rDataStrPtr = rDataStr;
 
-        /// put the rData in rDataStr buffer as hex numbers TODO: improve
-        for(unsigned int i = 0; i < rLength; ++i)
+        if(aType == 1)
         {
-            int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*querySection);
-            snprintf(rDataStrPtr, dataLen + 1, "%x\t", (uint16_t)*querySection);
+            if(rLength == IPV4_ALEN)
+            {
+                if(inet_ntop(AF_INET, querySection, rDataStr, INET_ADDRSTRLEN) == nullptr)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+                    return APPLICATION_ERROR;
+                }
+            }
+            else if(rLength == IPV6_ALEN)
+            {
+                if(inet_ntop(AF_INET6, querySection, rDataStr, INET6_ADDRSTRLEN) == nullptr)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error!");
+                    return APPLICATION_ERROR;
+                }
+            }
 
-            ++querySection;
-            rDataStrPtr += dataLen;
+            querySection += rLength;
+        }
+        else if(aType == 5)
+        {
+            querySection = ParseDomainName(rDataStr, querySection, data);
+        }
+        else
+        {
+            for(unsigned int i = 0; i < rLength; ++i)
+            {
+                int dataLen = snprintf(NULL, 0, "%x\t", (uint16_t)*querySection);
+                snprintf(rDataStrPtr, dataLen + 1, "%x\t", (uint16_t)*querySection);
+
+                ++querySection;
+                rDataStrPtr += dataLen;
+            }
+
+            *rDataStrPtr = '\0';
         }
 
-        *rDataStrPtr = '\0';
-        ///
+        int len = snprintf(NULL, 0, "name: %s\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
+            aName, aType, aClass, timeToLive, rLength, rDataStr);
 
-        int len = snprintf(NULL, 0, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
-            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rDataStr);
-
-        snprintf(dnsAnswersDataStrPtr, len + 1, "name: %s\nname length: %u\nnum labels: %u\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
-            aName, nameLength, numLabels, aType, aClass, timeToLive, rLength, rDataStr);
+        snprintf(dnsAnswersDataStrPtr, len + 1, "name: %s\ntype: 0x%x\nclass: 0x%x\ntime to live: %u\ndata length: %u\ndata: %s\n\n",
+            aName, aType, aClass, timeToLive, rLength, rDataStr);
 
         dnsAnswersDataStrPtr += len;
     }

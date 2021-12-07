@@ -113,7 +113,7 @@ namespace PacketCraft
     int ConvertHTTPLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
     int ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize);
 
-    uint8_t* ParseDomainName(char* domainNameStr, uint32_t& numLabels, uint32_t& nameLength, uint8_t* domainNameInDNSHeader);
+    uint8_t* ParseDomainName(char* domainNameStr, uint8_t* domainName, uint8_t* startOfHeader);
     //////////////////////////////////////////////////////////////////////////////////////
 
 }

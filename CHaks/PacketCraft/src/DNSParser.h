@@ -51,7 +51,7 @@ namespace PacketCraft
         uint16_t aClass;
         uint32_t timeToLive;
         uint16_t rLength;
-        char* rData;
+        char rData[FQDN_MAX_STR_LEN];
     };
 
     class DNSParser
@@ -62,12 +62,7 @@ namespace PacketCraft
         ~DNSParser();
 
         // parses data in host byte order, and the domain names in a clear string format, for example: www.google.com
-        void ParseToHostFormat(const DNSHeader& dnsHeader);
-
-        // parses data in network byte order, and the domain names in dns format with labels for example: 3www6google3com
-        void ParseToNetworkFormat(const DNSHeader& dnsHeader);
-
-        void PrintQueries();
+        int Parse(DNSHeader& dnsHeader);
 
         ParsedDNSHeader header;
         DNSQuestion* questionsArray;
@@ -75,7 +70,6 @@ namespace PacketCraft
 
         private:
         void FreeData();
-        bool32 parsedToNetworkFormat;
     };
 }
 
