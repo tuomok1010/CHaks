@@ -671,7 +671,7 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
             ResetPacketBuffer();
             
             // NOTE: for debugging, comment out to reduce spam
-            LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
+            // LOG_ERROR(APPLICATION_ERROR, "unsupported packet layer type received! Packet data cleared.");
 
             return APPLICATION_ERROR;
         }

@@ -1485,7 +1485,7 @@ uint8_t* PacketCraft::ParseDomainName(char* domainNameStr, uint8_t* domainName, 
     }
 }
 
-
+// TODO: should this utilize the DNSParser?
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;
@@ -1500,6 +1500,11 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
         char qName[FQDN_MAX_STR_LEN]{};
 
         querySection = ParseDomainName(qName, querySection, data);
+        if(querySection == nullptr)
+        {
+            // LOG_ERROR(APPLICATION_ERROR, "ParseDomainName() error!");
+            return APPLICATION_ERROR;
+        }
 
         uint16_t qType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
@@ -1522,6 +1527,11 @@ int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_
         char aName[FQDN_MAX_STR_LEN]{};
 
         querySection = ParseDomainName(aName, querySection, data);
+        if(querySection == nullptr)
+        {
+            // LOG_ERROR(APPLICATION_ERROR, "ParseDomainName() error!");
+            return APPLICATION_ERROR;
+        }
 
         uint16_t aType = ntohs(*(uint16_t*)querySection);
         querySection += 2;

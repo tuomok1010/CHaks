@@ -40,7 +40,11 @@ int CHaks::DNSSpoofer::Spoof(int socketFd, const char* interfaceName, char* targ
                 IPv4Header* ipv4Header = (IPv4Header*)packet.GetLayerStart(1);
                 if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_src.s_addr)
                 {
-                    dnsParser.Parse(*dnsHeader);
+                    if(dnsParser.Parse(*dnsHeader) == APPLICATION_ERROR)
+                    {
+                        LOG_ERROR(APPLICATION_ERROR, "DNSParser::Parse() error!");
+                        return APPLICATION_ERROR;
+                    }
 
                     for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
                     {

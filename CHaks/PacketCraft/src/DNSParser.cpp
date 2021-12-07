@@ -70,6 +70,11 @@ int PacketCraft::DNSParser::Parse(DNSHeader& dnsHeader)
     for(unsigned int i = 0; i < header.qcount; ++i)
     {
         querySection = ParseDomainName(questionsArray[i].qName, querySection, (uint8_t*)&dnsHeader);
+        if(querySection == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ParseDomainName() error!");
+            return APPLICATION_ERROR;
+        }
     
         questionsArray[i].qType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
@@ -81,6 +86,11 @@ int PacketCraft::DNSParser::Parse(DNSHeader& dnsHeader)
     for(unsigned int i = 0; i < header.ancount; ++i)
     {
         querySection = ParseDomainName(answersArray[i].aName, querySection, (uint8_t*)&dnsHeader);
+        if(querySection == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "ParseDomainName() error!");
+            return APPLICATION_ERROR;
+        }
 
         answersArray[i].aType = ntohs(*(uint16_t*)querySection);
         querySection += 2;
