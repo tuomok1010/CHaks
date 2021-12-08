@@ -10,25 +10,25 @@
 #define FQDN_MAX_STR_LEN                255
 
 // used when allocating buffers for printing different kinds of packet layers. Check PrintUDPLayer() in NetworkUtils for example
-#define PC_ETH_MAX_STR_SIZE             5000
-#define PC_ARP_MAX_STR_SIZE             5000
-#define PC_IPV4_MAX_STR_SIZE            5'000
-#define PC_IPV6_MAX_STR_SIZE            5'000
-#define PC_ICMPV4_MAX_STR_SIZE          5'000
-#define PC_ICMPV6_MAX_STR_SIZE          5'000
-#define PC_TCP_MAX_STR_SIZE             20'000
-#define PC_UDP_MAX_STR_SIZE             20'000
+#define PC_ETH_MAX_STR_SIZE             4'096
+#define PC_ARP_MAX_STR_SIZE             4'096
+#define PC_IPV4_MAX_STR_SIZE            4'096
+#define PC_IPV6_MAX_STR_SIZE            4'096
+#define PC_ICMPV4_MAX_STR_SIZE          4'096
+#define PC_ICMPV6_MAX_STR_SIZE          4'096
+#define PC_TCP_MAX_STR_SIZE             32'768
+#define PC_UDP_MAX_STR_SIZE             32'768
 ////////////////////////////////////////////////////
 
 // used when converting packet layers into strings. Check ConvertUDPLayerToString in NetworkUtils for example
-#define PC_ICMPV4_MAX_DATA_STR_SIZE     5000
-#define PC_IPV4_MAX_OPTIONS_STR_SIZE    5000
-#define PC_ICMPV6_MAX_DATA_STR_SIZE     5000
-#define PC_TCP_MAX_OPTIONS_STR_SIZE     5000
-#define PC_TCP_MAX_DATA_STR_SIZE        20'000
-#define PC_UDP_MAX_DATA_STR_SIZE        20'000
-#define PC_DNS_MAX_DATA_STR_SIZE        20'000
-#define PC_DNS_MAX_Q_SECTION_STR_SIZE   5000
+#define PC_ICMPV4_MAX_DATA_STR_SIZE     4'096
+#define PC_IPV4_MAX_OPTIONS_STR_SIZE    4'096
+#define PC_ICMPV6_MAX_DATA_STR_SIZE     4'096
+#define PC_TCP_MAX_OPTIONS_STR_SIZE     4'096
+#define PC_TCP_MAX_DATA_STR_SIZE        32'768
+#define PC_UDP_MAX_DATA_STR_SIZE        32'768
+#define PC_DNS_MAX_DATA_STR_SIZE        32'768
+#define PC_DNS_MAX_Q_SECTION_STR_SIZE   4'096
 ////////////////////////////////////////////////////
 
 
@@ -58,13 +58,27 @@
 // Supported application layer protocols, used mostly in PacketCraft::Packet class
 #define PC_HTTP_REQUEST     0x000a
 #define PC_HTTP_RESPONSE    0x000b
-#define PC_DNS              0x000c
+#define PC_DNS_REQUEST      0x000c
+#define PC_DNS_RESPONSE     0x000d
 /////////////////////////////////////////////////////
 
 // Supported HTTP methods, used in NetworkUtils GetHTTPMethod()
-#define PC_HTTP_POST        0x000d
-#define PC_HTTP_HEAD        0x000e
+#define PC_HTTP_GET         0x000e
+#define PC_HTTP_HEAD        0x000f
+#define PC_HTTP_POST        0x0010
+#define PC_HTTP_PUT         0x0011
+#define PC_HTTP_DELETE      0x0012
+#define PC_HTTP_CONNECT     0x0013
+#define PC_HTTP_OPTIONS     0x0014
+#define PC_HTTP_TRACE       0x0015
+#define PC_HTTP_PATCH       0x0016
 
+#define PC_HTTP_INFO        0x0017
+#define PC_HTTP_SUCCESS     0x0018
+#define PC_HTTP_REDIR       0x0019
+#define PC_HTTP_CLIENT_ERR  0x001a
+#define PC_HTTP_SERVER_ERR  0x001b
+/////////////////////////////////////////////////////
 
 #define PC_MAX_LAYERS       10
 
@@ -73,6 +87,7 @@
 
 #define NO_ERROR            0
 #define APPLICATION_ERROR   1
+#define APPLICATION_WARNING 2
 
 #define ETH_ADDR_STR_LEN    18
 

@@ -21,7 +21,7 @@ namespace PacketCraft
     void CopyStr(char* dest, size_t destSize, const char* src);
 
     // copies characters from src to dst until a delimiter character in src is found, if no delimiter is found it copies the entire string
-    void CopyUntil(char* dst, size_t destSize, const char* src, const char delimiter);
+    void CopyStrUntil(char* dst, size_t destSize, const char* src, const char delimiter);
     ////////////////
 
     bool32 CompareStr(const char* str1, const char* str2);

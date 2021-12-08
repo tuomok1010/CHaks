@@ -497,7 +497,8 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 
                 break;
             }
-            case PC_DNS:
+            case PC_DNS_RESPONSE:
+            case PC_DNS_REQUEST:
             {
                 uint32_t dataSize = GetLayerSize(i);
                 uint8_t* data = (uint8_t*)GetLayerStart(i);
@@ -660,9 +661,15 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
             return NO_ERROR;
         }
-        case PC_DNS:
+        case PC_DNS_REQUEST:
         {
-            AddLayer(PC_DNS, layerSize);
+            AddLayer(PC_DNS_REQUEST, layerSize);
+            memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
+            return NO_ERROR;
+        }
+        case PC_DNS_RESPONSE:
+        {
+            AddLayer(PC_DNS_RESPONSE, layerSize);
             memcpy(GetLayerStart(nLayers - 1), packet, layerSize);
             return NO_ERROR;
         }

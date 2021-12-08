@@ -21,7 +21,7 @@ void PacketCraft::CopyStr(char* dest, size_t destSize, const char* src)
     }
 }
 
-void PacketCraft::CopyUntil(char* dst, size_t destSize, const char* src, const char delimiter)
+void PacketCraft::CopyStrUntil(char* dst, size_t destSize, const char* src, const char delimiter)
 {
     for(size_t i = 0; i < destSize; ++i)
     {
@@ -81,7 +81,10 @@ void PacketCraft::PrintError(const int errorCode, const char* func, const char* 
         {
             std::cerr << "APPLICATION ERROR in function: " << func << ". Error message: " << msg << std::endl;
         } break;
-
+        case APPLICATION_WARNING:
+        {
+            std::cerr << "APPLICATION WARNING in function: " << func << ". Error message: " << msg << std::endl;
+        } break;
         default:
         {
             std::cerr << "UNKNOWN ERROR in function: " << func << ". Error message: " << msg << std::endl;

@@ -61,22 +61,63 @@ uint32_t PacketCraft::GetTCPDataProtocol(TCPHeader* tcpHeader)
     else if(ntohs(tcpHeader->dest) == 80)
         return PC_HTTP_REQUEST;
 
-    if(ntohs(tcpHeader->source) == 53 || ntohs(tcpHeader->dest) == 53)
-        return PC_DNS;
+    else if(ntohs(tcpHeader->source) == 53)
+        return PC_DNS_RESPONSE;
+    
+    else if(ntohs(tcpHeader->dest) == 53)
+        return PC_DNS_REQUEST;
 
     return PC_NONE;
 }
 
 uint32_t PacketCraft::GetUDPDataProtocol(UDPHeader* udpHeader)
 {
-    if(ntohs(udpHeader->dest) == 53 || ntohs(udpHeader->source) == 53)
-        return PC_DNS;
+    if(ntohs(udpHeader->source) == 53)
+        return PC_DNS_RESPONSE;
+    
+    else if(ntohs(udpHeader->dest) == 53)
+        return PC_DNS_REQUEST;
 
     return PC_NONE;
 }
 
 uint32_t PacketCraft::GetHTTPMethod(uint8_t* payloadData)
 {
+    char buffer[255]{};
+    CopyStrUntil(buffer, sizeof(buffer), (char*)payloadData, '\n');
+
+    // check request methods
+    if(FindInStr(buffer, "GET ") == 0)
+        return PC_HTTP_GET;
+    else if(FindInStr(buffer, "HEAD ") == 0)
+        return PC_HTTP_HEAD;
+    else if(FindInStr(buffer, "POST ") == 0)
+        return PC_HTTP_POST;
+    else if(FindInStr(buffer, "PUT ") == 0)
+        return PC_HTTP_PUT;
+    else if(FindInStr(buffer, "HEAD ") == 0)
+        return PC_HTTP_DELETE;
+    else if(FindInStr(buffer, "CONNECT ") == 0)
+        return PC_HTTP_CONNECT;
+    else if(FindInStr(buffer, "OPTIONS ") == 0)
+        return PC_HTTP_OPTIONS;
+    else if(FindInStr(buffer, "TRACE ") == 0)
+        return PC_HTTP_TRACE;
+    else if(FindInStr(buffer, "PATCH ") == 0)
+        return PC_HTTP_PATCH;
+
+    // check response status codes, TODO: improve
+    if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 1") != -1)
+        return PC_HTTP_INFO;
+    if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 2") != -1)
+        return PC_HTTP_SUCCESS;
+    if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 3") != -1)
+        return PC_HTTP_REDIR;
+    if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 4") != -1)
+        return PC_HTTP_CLIENT_ERR;
+    if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 5") != -1)
+        return PC_HTTP_SERVER_ERR;
+
     return PC_NONE;
 }
 
@@ -1485,7 +1526,7 @@ uint8_t* PacketCraft::ParseDomainName(char* domainNameStr, uint8_t* domainName, 
     }
 }
 
-// TODO: should this utilize the DNSParser?
+// TODO: should this utilize the DNSParser? Lots of same code...
 int PacketCraft::ConvertDNSLayerToString(char* buffer, size_t bufferSize, uint8_t* data, size_t dataSize)
 {
     DNSHeader* dnsHeader = (DNSHeader*)data;

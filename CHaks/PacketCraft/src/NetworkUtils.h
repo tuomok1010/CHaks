@@ -21,7 +21,8 @@ namespace PacketCraft
         {PC_UDP, "UDP"},
         {PC_HTTP_REQUEST, "HTTP_REQUEST"},
         {PC_HTTP_RESPONSE, "HTTP_RESPONSE"},
-        {PC_DNS, "DNS"}
+        {PC_DNS_REQUEST, "DNS_REQUEST"},
+        {PC_DNS_RESPONSE, "DNS_RESPONSE"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);

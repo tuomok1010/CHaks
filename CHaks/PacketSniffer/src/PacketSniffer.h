@@ -22,7 +22,8 @@ namespace CHaks
         {"UDP", PC_UDP},
         {"HTTP_REQUEST", PC_HTTP_REQUEST},
         {"HTTP_RESPONSE", PC_HTTP_RESPONSE},
-        {"DNS", PC_DNS}
+        {"DNS_REQUEST", PC_DNS_REQUEST},
+        {"DNS_RESPONSE", PC_DNS_RESPONSE}
     };
 
     class PacketSniffer
