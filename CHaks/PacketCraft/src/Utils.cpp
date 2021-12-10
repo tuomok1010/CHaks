@@ -34,6 +34,30 @@ void PacketCraft::CopyStrUntil(char* dst, size_t destSize, const char* src, cons
     }
 }
 
+void PacketCraft::ConcatStr(char* dst, size_t destSize, const char* str1, const char* str2)
+{
+    unsigned int str1EndIndex{0};
+
+    // copy string 1
+    for(size_t i = 0; i < destSize; ++i)
+    {
+        dst[i] = str1[i];
+        if(str1[i] == '\0')
+        {
+            str1EndIndex = i;
+            break;
+        }
+    }
+
+    // copy string 2
+    for(size_t i = str1EndIndex, j = 0; i < destSize; ++i, ++j)
+    {
+        dst[i] = str2[j];
+        if(str2[j] == '\0')
+            break;
+    }
+}
+
 bool32 PacketCraft::CompareStr(const char* str1, const char* str2)
 {
     while((*str1 == *str2))

@@ -11,6 +11,9 @@ namespace CHaks
         FileInterceptor();
         ~FileInterceptor();
 
+        int Run(int socketFd, char* interfaceName, uint32_t ipVersion, char* targetIP, char* downloadLink);
+        int FilterPackets(int socketFd, uint32_t ipVersion, char* targetIP, char* downloadLink, PacketCraft::Packet& packet);
+
         private:
     };
 }
