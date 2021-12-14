@@ -63,6 +63,31 @@ PacketCraft::Packet::Packet(void* packetBuffer):
     memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
+// TODO: test!
+PacketCraft::Packet::Packet(const Packet& packet)
+{
+    this->data = malloc(IP_MAXPACKET);
+    this->sizeInBytes = packet.sizeInBytes;
+    this->nLayers = packet.nLayers;
+    this->start = (uint8_t*)data;
+    this->end = (uint8_t*)data + sizeInBytes;
+    this->outsideBufferSupplied = FALSE;
+
+    memcpy(this->data, packet.data, packet.sizeInBytes);
+    this->printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
+    memset(this->printBuffer, '\0', PRINT_BUFFER_SIZE);
+
+    uint8_t* dataPtr = (uint8_t*)this->data;
+    for(unsigned int i = 0; i < packet.nLayers; ++i)
+    {
+        this->layerInfos[i].start = dataPtr;
+        dataPtr += packet.layerInfos[i].sizeInBytes;
+        this->layerInfos[i].end = dataPtr;
+        this->layerInfos[i].sizeInBytes = packet.layerInfos[i].sizeInBytes;
+        this->layerInfos[i].type = packet.layerInfos[i].type;
+    }
+}
+
 PacketCraft::Packet::~Packet()
 {
     FreePacket();

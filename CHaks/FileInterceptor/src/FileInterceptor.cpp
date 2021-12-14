@@ -6,7 +6,8 @@
 #include <poll.h>
 #include <arpa/inet.h>
 
-CHaks::FileInterceptor::FileInterceptor()
+CHaks::FileInterceptor::FileInterceptor() :
+    requestAckNum(0)
 {
 
 }
@@ -16,9 +17,10 @@ CHaks::FileInterceptor::~FileInterceptor()
     
 }
 
-int CHaks::FileInterceptor::Run(int socketFd, char* interfaceName, uint32_t ipVersion, char* targetIP, char* downloadLink)
+int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, const uint32_t ipVersion, const char* targetIP, 
+    const char* downloadLink, const char* newDownloadLink)
 {
-    pollfd pollFds[3]{};
+    pollfd pollFds[2]{};
         
     // we want to monitor console input, entering something there stops the program
     pollFds[0].fd = 0;
@@ -53,7 +55,7 @@ int CHaks::FileInterceptor::Run(int socketFd, char* interfaceName, uint32_t ipVe
             }
             else if(pollFds[1].revents & POLLIN)
             {
-                if(FilterPackets(socketFd, ipVersion, targetIP, downloadLink, packet) == APPLICATION_ERROR)
+                if(FilterPackets(socketFd, ipVersion, targetIP, downloadLink, newDownloadLink, packet) == APPLICATION_ERROR)
                 {
                     LOG_ERROR(APPLICATION_ERROR, "FilterPackets error");
                     return APPLICATION_ERROR;
@@ -63,7 +65,8 @@ int CHaks::FileInterceptor::Run(int socketFd, char* interfaceName, uint32_t ipVe
     }
 }
 
-int CHaks::FileInterceptor::FilterPackets(int socketFd, uint32_t ipVersion, char* targetIP, char* downloadLink, PacketCraft::Packet& packet)
+int CHaks::FileInterceptor::FilterPackets(const int socketFd, const uint32_t ipVersion, const char* targetIP, const char* downloadLink, 
+    const char* newDownloadLink, PacketCraft::Packet& packet)
 {
     if(packet.Receive(socketFd, 0) == APPLICATION_ERROR)
     {
@@ -87,10 +90,9 @@ int CHaks::FileInterceptor::FilterPackets(int socketFd, uint32_t ipVersion, char
 
     if(httpRequest != nullptr)
     {
-        /*
+
         if(PacketCraft::GetHTTPMethod((uint8_t*)httpRequest) == PC_HTTP_GET)
         {
-            std::cout << httpRequest << std::endl;
             char buffer[255]{};
 
             // Copy the first line of the http request in buffer. Should be something like this: "GET /test/file.php HTTP/1.1"
@@ -112,26 +114,73 @@ int CHaks::FileInterceptor::FilterPackets(int socketFd, uint32_t ipVersion, char
             packetDomainName[domainEndIndex] = '\0';
 
             PacketCraft::ConcatStr(packetDownloadLink, sizeof(packetDownloadLink), packetDomainName, packetFileName);
-            std::cout << "full packet download link: " << packetDownloadLink << std::endl;
 
             if(PacketCraft::CompareStr(packetDownloadLink, downloadLink) == TRUE)
             {
-                std::cout << "packet containing " << packetDownloadLink << " matches " << downloadLink << std::endl;
+                std::cout << httpRequest << "\n\n";
+                TCPHeader* tcpHeader = (TCPHeader*)packet.FindLayerByType(PC_TCP);
+                if(tcpHeader == nullptr)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::FindLayerByType() error");
+                    return APPLICATION_ERROR;
+                }
+
+                requestAckNum = tcpHeader->ack_seq;
             }
         }
-        */
     }
     else if(httpResponse != nullptr)
     {
-        std::cout << httpResponse << std::endl;
-        
-        if(ipVersion == AF_INET)
-        {
-            IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
-            if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_dst.s_addr)
+        if(PacketCraft::GetHTTPMethod((uint8_t*)httpResponse) == PC_HTTP_SUCCESS)
+        { 
+            if(ipVersion == AF_INET)
             {
+                IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
+                if(ipv4Header == nullptr)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "could not find ipv4 layer");
+                    return APPLICATION_ERROR;
+                }
 
+                if(targetIPAddr.sin_addr.s_addr == ipv4Header->ip_dst.s_addr)
+                {
+                    TCPHeader* tcpHeader = (TCPHeader*)packet.FindLayerByType(PC_TCP);
+                    if(tcpHeader == nullptr)
+                    {
+                        LOG_ERROR(APPLICATION_ERROR, "could not find tcp layer");
+                        return APPLICATION_ERROR;
+                    }
+
+                    if(tcpHeader->seq == requestAckNum)
+                    {
+                        std::cout << httpResponse << "\n\n";
+                        PacketCraft::Packet newResponse;
+                        CreateResponse(packet, newResponse, newDownloadLink);
+                    }
+                }
+            }
+            else if(ipVersion == AF_INET6)
+            {
+                // TODO: ipv6 support
+                LOG_ERROR(APPLICATION_ERROR, "IPV6 not supported");
+                return APPLICATION_ERROR;
             }
         }
     }
+
+    return NO_ERROR;
+}
+
+int CHaks::FileInterceptor::CreateResponse(const PacketCraft::Packet& originalResponse, PacketCraft::Packet& newResponse, 
+    const char* newDownloadLink) const
+{
+    newResponse = originalResponse;
+    char httpData[1024]{};
+
+    originalResponse.Print();
+    std::cout << "\n\n";
+    newResponse.Print();
+    std::cout << "\npackets printed\n\n";
+
+    // segmentation fault after this....TODO FIX!!! probably an issue with Packet class...
 }
