@@ -1,7 +1,7 @@
 #ifndef PACKET_SNIFFER_H
 #define PACKET_SNIFFER_H
 
-#include "/home/tuomok/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
+#include "../../../PacketCraft/src/include/PCInclude.h"
 #include <unordered_map>
 
 #define N_PROTOCOLS_SUPPORTED   11
