@@ -60,6 +60,8 @@ int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, c
                     LOG_ERROR(APPLICATION_ERROR, "FilterPackets error");
                     return APPLICATION_ERROR;
                 }
+
+                packet.ResetPacketBuffer();
             }
         }
     }
@@ -156,6 +158,7 @@ int CHaks::FileInterceptor::FilterPackets(const int socketFd, const uint32_t ipV
                         std::cout << httpResponse << "\n\n";
                         PacketCraft::Packet newResponse;
                         CreateResponse(packet, newResponse, newDownloadLink);
+                        std::cout << "response created\n";
                     }
                 }
             }
@@ -174,13 +177,12 @@ int CHaks::FileInterceptor::FilterPackets(const int socketFd, const uint32_t ipV
 int CHaks::FileInterceptor::CreateResponse(const PacketCraft::Packet& originalResponse, PacketCraft::Packet& newResponse, 
     const char* newDownloadLink) const
 {
-    newResponse = originalResponse;
-    char httpData[1024]{};
 
-    originalResponse.Print();
-    std::cout << "\n\n";
-    newResponse.Print();
-    std::cout << "\npackets printed\n\n";
 
-    // segmentation fault after this....TODO FIX!!! probably an issue with Packet class...
+    const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
+    uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
+    char* fullHTTPCode = (char*)malloc(responseCodeLen);
+    PacketCraft::ConcatStr(fullHTTPCode, responseCodeLen, httpStatusCode, newDownloadLink);
+
+    return NO_ERROR;
 }

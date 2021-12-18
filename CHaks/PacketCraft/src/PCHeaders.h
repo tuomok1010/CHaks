@@ -106,7 +106,18 @@ struct __attribute__((__packed__)) ICMPv6Header
     uint8_t     icmp6_type;   /* type field */
     uint8_t     icmp6_code;   /* code field */
     uint16_t    icmp6_cksum;  /* checksum field */
-
+    union
+    {
+        struct
+        {
+            uint32_t msg32;
+        };     
+        struct
+        {
+            uint8_t msg8[4];
+        };   
+    };
+    
     uint8_t data[];
 };
 

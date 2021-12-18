@@ -20,7 +20,7 @@ const char* PacketCraft::ProtoUint32ToStr(uint32_t protocol)
 
 uint32_t PacketCraft::ProtoStrToUint32(const char* protocol)
 {
-    for(const std::pair<uint32_t, const char*>& e : networkProtocols)
+    for(const std::pair<uint32_t, const char*> e : networkProtocols)
     {
         if(CompareStr(e.second, protocol) == TRUE)
             return e.first;
@@ -1267,9 +1267,9 @@ int PacketCraft::ConvertICMPv4LayerToString(char* buffer, size_t bufferSize, ICM
 
     *dataPtr = '\0';
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u(%s)\nid: %u sequence: %u\n\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
-    (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, ntohs(icmpv4Header->un.echo.id),
-    ntohs(icmpv4Header->un.echo.sequence), (uint32_t)icmpv4DataSize, (icmpv4DataSize > 0 ? data : "NONE FOUND"));
+    int res = snprintf(buffer, bufferSize, "[ICMPv4]:\ntype: %u\ncode: %u\nchecksum: %u, 0x%x(%s)\nid: %u sequence: %u\n\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
+    (uint16_t)icmpv4Header->type, (uint16_t)icmpv4Header->code, ntohs(icmpv4Header->checksum), ntohs(icmpv4Header->checksum), icmpv4ChecksumVerified, 
+    ntohs(icmpv4Header->un.echo.id), ntohs(icmpv4Header->un.echo.sequence), (uint32_t)icmpv4DataSize, (icmpv4DataSize > 0 ? data : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {
@@ -1303,9 +1303,9 @@ int PacketCraft::ConvertICMPv6LayerToString(char* buffer, size_t bufferSize, ICM
 
     *dataPtr = '\0';
 
-    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u\n\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
-    (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), (uint32_t)icmpv6DataSize, 
-    (icmpv6DataSize > 0 ? data : "NONE FOUND"));
+    int res = snprintf(buffer, bufferSize, "[ICMPv6]:\ntype: %u\ncode: %u\nchecksum: %u, 0x%x\nmessage: %u, 0x%x\n[data](%u bytes):\n%s\n . . . . . . . . . . \n",
+    (uint16_t)icmpv6Header->icmp6_type, (uint16_t)icmpv6Header->icmp6_code, ntohs(icmpv6Header->icmp6_cksum), ntohs(icmpv6Header->icmp6_cksum), 
+    ntohl(icmpv6Header->msg32), ntohl(icmpv6Header->msg32), (uint32_t)icmpv6DataSize, (icmpv6DataSize > 0 ? data : "NONE FOUND"));
 
     if(res > -1 && res < (int)bufferSize)
     {

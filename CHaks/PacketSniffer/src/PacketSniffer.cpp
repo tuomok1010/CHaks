@@ -131,7 +131,7 @@ int CHaks::PacketSniffer::Sniff()
 
 bool32 CHaks::PacketSniffer::IsProtocolSupported(const char* protocol) const
 {
-    for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
+    for(const std::pair<const char*, uint32_t> e : supportedProtocols)
     {
         if(PacketCraft::CompareStr(protocol, e.first) == TRUE)
             return TRUE;
@@ -142,7 +142,7 @@ bool32 CHaks::PacketSniffer::IsProtocolSupported(const char* protocol) const
 
 bool32 CHaks::PacketSniffer::IsProtocolSupported(uint32_t protocol) const
 {
-    for(const std::pair<const char*, uint32_t>& e : supportedProtocols)
+    for(const std::pair<const char*, uint32_t> e : supportedProtocols)
     {
         if(protocol == e.second)
             return TRUE;

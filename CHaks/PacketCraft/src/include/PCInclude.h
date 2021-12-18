@@ -5,8 +5,6 @@
 #include "../NetworkUtils.h"
 #include "../PCHeaders.h"
 #include "../ARP.h"
-#include "../IPv4PingPacket.h"
-#include "../IPv6PingPacket.h"
 #include "../DNSParser.h"
 
 #endif

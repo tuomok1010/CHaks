@@ -14,14 +14,14 @@
 #include <netinet/ip.h>
 #include <linux/if_packet.h>
 #include <net/if.h>
+#include <arpa/inet.h>
 
 PacketCraft::Packet::Packet():
     data(nullptr),
     start(nullptr),
     end(nullptr),
     sizeInBytes(0),
-    nLayers(0),
-    outsideBufferSupplied(FALSE)
+    nLayers(0)
 {
     for(int i = 0; i < PC_MAX_LAYERS; ++i)
     {
@@ -34,44 +34,30 @@ PacketCraft::Packet::Packet():
     data = malloc(IP_MAXPACKET);
     start = (uint8_t*)data;
     end = (uint8_t*)data;
+    memset(data, 0, IP_MAXPACKET);
 
     printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
     memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
-PacketCraft::Packet::Packet(void* packetBuffer):
-    data(nullptr),
-    start(nullptr),
-    end(nullptr),
-    sizeInBytes(0),
-    nLayers(0),
-    outsideBufferSupplied(TRUE)
-{
-    for(int i = 0; i < PC_MAX_LAYERS; ++i)
-    {
-        layerInfos[i].type = PC_NONE;
-        layerInfos[i].sizeInBytes = 0;
-        layerInfos[i].start = nullptr;
-        layerInfos[i].end = nullptr;
-    }
-
-    data = packetBuffer;
-    start = (uint8_t*)data;
-    end = (uint8_t*)data;
-
-    printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
-    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
-}
-
-// TODO: test!
 PacketCraft::Packet::Packet(const Packet& packet)
+{
+    *this = packet; // works because we have an overloaded '=' operator
+}
+
+PacketCraft::Packet::~Packet()
+{
+    FreePacket();
+    free(printBuffer);
+}
+
+void PacketCraft::Packet::operator = (const Packet& packet)
 {
     this->data = malloc(IP_MAXPACKET);
     this->sizeInBytes = packet.sizeInBytes;
     this->nLayers = packet.nLayers;
     this->start = (uint8_t*)data;
     this->end = (uint8_t*)data + sizeInBytes;
-    this->outsideBufferSupplied = FALSE;
 
     memcpy(this->data, packet.data, packet.sizeInBytes);
     this->printBuffer = (char*)malloc(PRINT_BUFFER_SIZE);
@@ -86,12 +72,6 @@ PacketCraft::Packet::Packet(const Packet& packet)
         this->layerInfos[i].sizeInBytes = packet.layerInfos[i].sizeInBytes;
         this->layerInfos[i].type = packet.layerInfos[i].type;
     }
-}
-
-PacketCraft::Packet::~Packet()
-{
-    FreePacket();
-    free(printBuffer);
 }
 
 int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSize)
@@ -211,29 +191,6 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
     return APPLICATION_ERROR;
 }
 
-void PacketCraft::Packet::ResetPacketBuffer()
-{
-    if(data)
-    {
-        memset(data, 0, sizeInBytes);
-    }
-
-    start = (uint8_t*)data;
-    end = (uint8_t*)data;
-    sizeInBytes = 0;
-    nLayers = 0;
-
-    for(int i = 0; i < PC_MAX_LAYERS; ++i)
-    {
-        layerInfos[i].type = PC_NONE;
-        layerInfos[i].sizeInBytes = 0;
-        layerInfos[i].start = nullptr;
-        layerInfos[i].end = nullptr;
-    }
-
-    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
-}
-
 void* PacketCraft::Packet::FindLayerByType(const uint32_t layerType) const
 {
     for(unsigned int i = 0; i < nLayers; ++i)
@@ -243,6 +200,88 @@ void* PacketCraft::Packet::FindLayerByType(const uint32_t layerType) const
     }
 
     return nullptr;
+}
+
+void PacketCraft::Packet::CalculateChecksums()
+{
+    for(unsigned int i = 0; i < nLayers; ++i)
+    {
+        switch(layerInfos[i].type)
+        {
+            case PC_IPV4:
+            {
+                IPv4Header* ipv4Header = (IPv4Header*)GetLayerStart(i);
+                ipv4Header->ip_sum = 0;
+                ipv4Header->ip_sum = CalculateChecksum(ipv4Header, ipv4Header->ip_hl * 32 / 8);
+                break;
+            }
+            case PC_ICMPV4:
+            {
+                ICMPv4Header* icmpv4Header = (ICMPv4Header*)GetLayerStart(i);
+                icmpv4Header->checksum = 0;
+                icmpv4Header->checksum = CalculateChecksum(icmpv4Header, GetLayerSize(i));
+                break;
+            }
+            case PC_ICMPV6:
+            {
+                IPv6Header* ipv6Header = (IPv6Header*)FindLayerByType(PC_IPV6);
+                ICMPv6Header* icmpv6Header = (ICMPv6Header*)GetLayerStart(i);
+                icmpv6Header->icmp6_cksum = 0;
+
+                ICMPv6PseudoHeader pseudoHeader;
+                memcpy(pseudoHeader.ip6_src.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
+                memcpy(pseudoHeader.ip6_dst.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
+                pseudoHeader.payloadLength = htonl(GetLayerSize(i));
+                memset(pseudoHeader.zeroes, 0, 3);
+                pseudoHeader.nextHeader = 58;
+
+                size_t dataSize = sizeof(pseudoHeader) + GetLayerSize(i);
+                uint8_t* data = (uint8_t*)malloc(dataSize);
+                memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                memcpy(data + sizeof(pseudoHeader), icmpv6Header, GetLayerSize(i));
+
+                icmpv6Header->icmp6_cksum = CalculateChecksum(data, dataSize);
+                free(data);
+
+                break;
+            }
+            case PC_UDP: // TODO: padding! needs to be a multiple of 2 octets
+            {
+                IPv4Header* ipv4Header = (IPv4Header*)FindLayerByType(PC_IPV4);
+                IPv6Header* ipv6Header = (IPv6Header*)FindLayerByType(PC_IPV6);
+                UDPHeader* udpHeader = (UDPHeader*)GetLayerStart(i);
+                udpHeader->check = 0;
+
+                if(ipv4Header != nullptr)
+                {
+                    UDPv4PseudoHeader pseudoHeader;
+                    memcpy(&pseudoHeader.ip_src.s_addr, &ipv4Header->ip_src.s_addr, IPV4_ALEN);
+                    memcpy(&pseudoHeader.ip_dst.s_addr, &ipv4Header->ip_dst.s_addr, IPV4_ALEN);
+                    pseudoHeader.zeroes = 0;
+                    pseudoHeader.proto = ipv4Header->ip_p;
+                    pseudoHeader.udpLen = udpHeader->len;
+
+                    size_t dataSize = sizeof(pseudoHeader) + GetLayerSize(i);
+                    uint8_t* data = (uint8_t*)malloc(dataSize);
+                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                    memcpy(data + sizeof(pseudoHeader), udpHeader, GetLayerSize(i));
+
+                    udpHeader->check = CalculateChecksum(data, dataSize);
+                    free(data);
+                }
+                else if(ipv6Header != nullptr)
+                {
+
+                }
+
+                break;
+            }
+            case PC_TCP:
+            {
+                break;
+            }
+        }
+    }
 }
 
 int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) const
@@ -578,7 +617,6 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 }
 
 // TODO: extensive testing! This needs to be bulletproof!!!
-// TODO: add payload protocols (HTTP, DNS etc.)
 int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
     switch(protocol)
@@ -715,10 +753,9 @@ int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, u
 
 void PacketCraft::Packet::FreePacket()
 {
-    if(data)
+    if(data && sizeInBytes > 0)
     {
-        if(outsideBufferSupplied == FALSE)
-            free(data);
+        free(data);
     }
 
     data = nullptr;
@@ -734,6 +771,29 @@ void PacketCraft::Packet::FreePacket()
         layerInfos[i].start = nullptr;
         layerInfos[i].end = nullptr;
     }
+}
+
+void PacketCraft::Packet::ResetPacketBuffer()
+{
+    if(data)
+    {
+        memset(data, 0, sizeInBytes);
+    }
+
+    start = (uint8_t*)data;
+    end = (uint8_t*)data;
+    sizeInBytes = 0;
+    nLayers = 0;
+
+    for(int i = 0; i < PC_MAX_LAYERS; ++i)
+    {
+        layerInfos[i].type = PC_NONE;
+        layerInfos[i].sizeInBytes = 0;
+        layerInfos[i].start = nullptr;
+        layerInfos[i].end = nullptr;
+    }
+
+    memset(printBuffer, '\0', PRINT_BUFFER_SIZE);
 }
 
 void* PacketCraft::Packet::GetLayerStart(const uint32_t layerIndex) const

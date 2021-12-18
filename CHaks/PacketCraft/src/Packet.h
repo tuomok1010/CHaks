@@ -23,9 +23,10 @@ namespace PacketCraft
     {
         public:
         Packet();
-        Packet(void* packetBuffer);
         Packet(const Packet& packet);
         ~Packet();
+
+        void operator = (const Packet& packet);
 
         // Check PCTypes.h for valid layerTypes
         int AddLayer(const uint32_t layerType, const size_t layerSize);
@@ -33,6 +34,7 @@ namespace PacketCraft
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1); // negative timeout means we wait forever until a packet is received
         void ResetPacketBuffer();
         void* FindLayerByType(const uint32_t layerType) const;
+        void CalculateChecksums();
 
         // if printToFile is true, prints the packet into a txt file in fullFilePath, otherwise prints it in console
         int Print(bool32 printToFile = FALSE, const char* fullFilePath = "") const;
@@ -63,8 +65,6 @@ namespace PacketCraft
 
         int sizeInBytes;
         uint32_t nLayers;
-
-        bool32 outsideBufferSupplied;
 
         char* printBuffer;
     };
