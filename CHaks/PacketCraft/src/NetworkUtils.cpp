@@ -1,6 +1,7 @@
 #include "NetworkUtils.h"
 #include "Utils.h"
 #include "PCHeaders.h"
+#include "Packet.h"
 
 #include <iostream>
 #include <cstring>              // memcpy
@@ -574,6 +575,87 @@ int PacketCraft::SetMACAddr(const int socketFd, const char* interfaceName, const
     return SetMACAddr(socketFd, interfaceName, macAddr);
 }
 
+int PacketCraft::GetTargetMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& targetIP, ether_addr& targetMAC, int timeOut)
+{
+    ether_addr srcMAC{};
+    if(GetMACAddr(srcMAC, interfaceName, socketFd) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetMACAddr() error");
+        return APPLICATION_ERROR;
+    }
+
+    sockaddr_in srcIP{};
+    if(GetIPAddr(srcIP, interfaceName) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetIPAddr() error");
+        return APPLICATION_ERROR;
+    }
+
+    ether_addr broadcastMACAddr{};
+    if(ether_aton_r("ff:ff:ff:ff:ff:ff", &broadcastMACAddr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error");
+        return APPLICATION_ERROR;
+    }
+
+    while (GetARPTableMACAddr(socketFd, interfaceName, targetIP, targetMAC) == APPLICATION_ERROR)
+    {
+        Packet arpPacket;
+
+        arpPacket.AddLayer(PC_ETHER_II, ETH_HLEN);
+        EthHeader* ethHeader = (EthHeader*)arpPacket.GetLayerStart(0);
+        memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
+        memcpy(ethHeader->ether_dhost, broadcastMACAddr.ether_addr_octet, ETH_ALEN);
+        ethHeader->ether_type = htons(ETH_P_ARP);
+
+        arpPacket.AddLayer(PC_ARP, sizeof(ARPHeader));
+        ARPHeader* arpHeader = (ARPHeader*)arpPacket.GetLayerStart(1);
+        arpHeader->ar_hrd = htons(ARPHRD_ETHER);
+        arpHeader->ar_pro = htons(ETH_P_IP);
+        arpHeader->ar_hln = ETH_ALEN;
+        arpHeader->ar_pln = IPV4_ALEN;
+        arpHeader->ar_op = htons(ARPOP_REQUEST);
+        memcpy(arpHeader->ar_sha, srcMAC.ether_addr_octet, ETH_ALEN);
+        memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
+        memcpy(arpHeader->ar_tha, broadcastMACAddr.ether_addr_octet, ETH_ALEN);
+        memcpy(arpHeader->ar_tip, &targetIP.sin_addr.s_addr, IPV4_ALEN);
+
+        if(arpPacket.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "Send() error!");
+            return APPLICATION_ERROR;
+        }
+
+        arpPacket.ResetPacketBuffer();
+        if(arpPacket.Receive(socketFd, 0, timeOut) == NO_ERROR)
+        {
+            sockaddr_in ipAddr{};
+            ipAddr.sin_family = AF_INET;
+
+            ARPHeader* arpHeader = (ARPHeader*)arpPacket.FindLayerByType(PC_ARP);
+            if(arpHeader == nullptr)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "Could not find ARP layer");
+                return APPLICATION_ERROR;
+            }
+
+            memcpy(&ipAddr.sin_addr.s_addr, arpHeader->ar_sip, IPV4_ALEN);
+            if(AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpHeader->ar_sha) == APPLICATION_ERROR)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
+                return APPLICATION_ERROR;
+            }
+        }
+        else
+        {
+            LOG_ERROR(APPLICATION_ERROR, "Could not get target MAC address");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return NO_ERROR;
+}
+
 int PacketCraft::EnablePortForwarding()
 {
     int status{};
@@ -625,12 +707,16 @@ uint16_t PacketCraft::CalculateChecksum(void* data, size_t sizeInBytes)
 
     while(sizeInBytes > 1)  
     {
+        printf("adding %x\n", *dataPtr16);
         sum += *dataPtr16++;
         sizeInBytes -= 2;
     }
 
     if(sizeInBytes > 0)
+    {
+        std::cout << "PacketCraft::CalculateChecksum: sizeInBytes was odd" << std::endl;
         sum += *(uint8_t*)dataPtr16;
+    }
 
     while(sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);

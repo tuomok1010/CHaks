@@ -69,6 +69,10 @@ namespace PacketCraft
     int SetMACAddr(const int socketFd, const char* interfaceName, const ether_addr& newMACAddr);
     int SetMACAddr(const int socketFd, const char* interfaceName, const char* newMACAddrStr);
 
+    // attempts to get the MAC of another device in the network and store it in targetMAC. 
+    // If succesfull it adds it to the ARP table. timeOut is in milliseconds, negative means we wait forever
+    int GetTargetMACAddr(const int socketFd, const char* interfaceName, const sockaddr_in& targetIP, ether_addr& targetMAC, int timeOut = -1);
+
     int EnablePortForwarding();
     int DisablePortForwarding();
 

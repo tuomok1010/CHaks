@@ -245,7 +245,7 @@ void PacketCraft::Packet::CalculateChecksums()
 
                 break;
             }
-            case PC_UDP: // TODO: padding! needs to be a multiple of 2 octets
+            case PC_UDP:
             {
                 IPv4Header* ipv4Header = (IPv4Header*)FindLayerByType(PC_IPV4);
                 IPv6Header* ipv6Header = (IPv6Header*)FindLayerByType(PC_IPV6);
@@ -261,17 +261,28 @@ void PacketCraft::Packet::CalculateChecksums()
                     pseudoHeader.proto = ipv4Header->ip_p;
                     pseudoHeader.udpLen = udpHeader->len;
 
-                    size_t dataSize = sizeof(pseudoHeader) + GetLayerSize(i);
-                    uint8_t* data = (uint8_t*)malloc(dataSize);
-                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
-                    memcpy(data + sizeof(pseudoHeader), udpHeader, GetLayerSize(i));
+                    size_t dataSize = sizeof(pseudoHeader) + ntohs(udpHeader->len);
+                    
+                    if((ntohs(udpHeader->len) - sizeof(UDPHeader)) % 2 != 0)
+                        dataSize += 1;
+                        
 
+                    uint8_t* data = (uint8_t*)malloc(dataSize);
+                    memset(data, 0, dataSize);
+                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                    memcpy(data + sizeof(pseudoHeader), udpHeader, ntohs(udpHeader->len));
+        
                     udpHeader->check = CalculateChecksum(data, dataSize);
+                    if(ntohs(udpHeader->check) == 0)
+                        udpHeader->check = ~0;
+
                     free(data);
                 }
                 else if(ipv6Header != nullptr)
                 {
-
+                    UDPv6PseudoHeader pseudoHeader;
+                    memcpy(pseudoHeader.ip6_src.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
+                    memcpy(pseudoHeader.ip6_dst.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
                 }
 
                 break;

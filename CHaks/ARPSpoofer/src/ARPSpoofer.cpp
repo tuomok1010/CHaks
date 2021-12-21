@@ -7,6 +7,7 @@
 #include <net/if_arp.h>
 #include <arpa/inet.h> 
 #include <sys/ioctl.h> 
+#include <netinet/ether.h> 
 
 CHaks::ARPSpoofer::ARPSpoofer()
 {
@@ -21,40 +22,24 @@ CHaks::ARPSpoofer::~ARPSpoofer()
 int CHaks::ARPSpoofer::GetTargetMACAddr(const int socketFd, const char* interfaceName, const char* srcIPStr, const char* srcMACStr, 
     const char* targetIPStr, char* targetMACStr)
 {
-    while (PacketCraft::GetARPTableMACAddr(socketFd, interfaceName, targetIPStr, targetMACStr) == APPLICATION_ERROR)
+    sockaddr_in targetIP{};
+    if(inet_pton(AF_INET, targetIPStr, &targetIP.sin_addr) == -1)
     {
-        std::cout << "Could not find target in the ARP table. Sending ARP request...\n";
+        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+        return APPLICATION_ERROR;
+    }
 
-        PacketCraft::ARPPacket arpPacket;
-        if(arpPacket.Create(srcMACStr, "ff:ff:ff:ff:ff:ff", srcIPStr, targetIPStr, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Create() error!");
-            return APPLICATION_ERROR;
-        }
+    ether_addr targetMAC{};
+    if(PacketCraft::GetTargetMACAddr(socketFd, interfaceName, targetIP, targetMAC, 10'000) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "GetTargetMACAddr() error");
+        return APPLICATION_ERROR;
+    }
 
-        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
-            return APPLICATION_ERROR;
-        }
-
-        if(arpPacket.Receive(socketFd, 0, ARP_REQ_TIMEOUT_MS) == NO_ERROR)
-        {
-            sockaddr_in ipAddr{};
-            ipAddr.sin_family = AF_INET;
-            memcpy(&ipAddr.sin_addr.s_addr, arpPacket.arpHeader->ar_sip, IPV4_ALEN);
-
-            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpPacket.arpHeader->ar_sha) == APPLICATION_ERROR)
-            {
-                LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
-                return APPLICATION_ERROR;
-            }
-        }
-        else
-        {
-            std::cout << "Could not get target MAC address." << std::endl;
-            return APPLICATION_ERROR;
-        }
+    if(ether_ntoa_r(&targetMAC, targetMACStr) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_ntoa_r() error");
+        return APPLICATION_ERROR;
     }
 
     return NO_ERROR;
