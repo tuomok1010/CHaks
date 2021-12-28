@@ -283,12 +283,66 @@ void PacketCraft::Packet::CalculateChecksums()
                     UDPv6PseudoHeader pseudoHeader;
                     memcpy(pseudoHeader.ip6_src.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
                     memcpy(pseudoHeader.ip6_dst.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
+                    pseudoHeader.udpLen = udpHeader->len;
+                    memset(pseudoHeader.zeroes, 0, 3);
+                    pseudoHeader.nextHeader = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+                    size_t dataSize = sizeof(pseudoHeader) + ntohs(udpHeader->len);
+                    
+                    if((ntohs(udpHeader->len) - sizeof(UDPHeader)) % 2 != 0)
+                        dataSize += 1;
+
+                    uint8_t* data = (uint8_t*)malloc(dataSize);
+                    memset(data, 0, dataSize);
+                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                    memcpy(data + sizeof(pseudoHeader), udpHeader, ntohs(udpHeader->len));
+
+                    udpHeader->check = CalculateChecksum(data, dataSize);
+                    if(ntohs(udpHeader->check) == 0)
+                        udpHeader->check = ~0;
+
+                    free(data);
                 }
 
                 break;
             }
-            case PC_TCP:
+            case PC_TCP: // TODO: TEST
             {
+                IPv4Header* ipv4Header = (IPv4Header*)FindLayerByType(PC_IPV4);
+                IPv6Header* ipv6Header = (IPv6Header*)FindLayerByType(PC_IPV6);
+                TCPHeader* tcpHeader = (TCPHeader*)GetLayerStart(i);
+                tcpHeader->check = 0;
+
+                if(ipv4Header != nullptr)
+                {
+                    TCPv4PseudoHeader pseudoHeader;
+                    memcpy(&pseudoHeader.ip_src.s_addr, &ipv4Header->ip_src.s_addr, IPV4_ALEN);
+                    memcpy(&pseudoHeader.ip_dst.s_addr, &ipv4Header->ip_dst.s_addr, IPV4_ALEN);
+                    pseudoHeader.zeroes = 0;
+                    pseudoHeader.proto = ipv4Header->ip_p;
+                    pseudoHeader.tcpLen = htons(ntohs(ipv4Header->ip_len) - (ipv4Header->ip_hl * 32 / 8));
+
+                    size_t dataSize = sizeof(pseudoHeader) + ntohs(pseudoHeader.tcpLen);
+                    if(dataSize % 2 != 0)
+                        dataSize += 1;
+
+                    uint8_t* data = (uint8_t*)malloc(dataSize);
+                    memset(data, 0, dataSize);
+                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                    memcpy(data + sizeof(pseudoHeader), tcpHeader, ntohs(pseudoHeader.tcpLen));
+
+                    tcpHeader->check = CalculateChecksum(data, dataSize);
+                    free(data);
+
+                }
+                else if(ipv6Header != nullptr)
+                {
+                    TCPv6PseudoHeader pseudoHeader;
+                    memcpy(pseudoHeader.ip6_src.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
+                    memcpy(pseudoHeader.ip6_dst.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
+                    pseudoHeader.tcpLen = 
+                }
+
                 break;
             }
         }

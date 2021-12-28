@@ -13,6 +13,7 @@
 #include <ifaddrs.h>            // getifaddrs() / freeifaddrs()
 #include <arpa/inet.h>          // inet_pton() / inet_ntop()  
 #include <netinet/ip.h>
+#include <netinet/ip6.h>
 
 const char* PacketCraft::ProtoUint32ToStr(uint32_t protocol)
 {

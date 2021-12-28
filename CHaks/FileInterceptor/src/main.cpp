@@ -5,6 +5,7 @@
 #include <arpa/inet.h> 
 #include <netinet/ip.h>
 #include <net/if.h>
+#include <netinet/in.h>
 #include <unistd.h>
 #include <cstring>
 
@@ -70,72 +71,6 @@ int main(int argc, char** argv)
     } 
 
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-
-    //
-    while(true)
-    {
-        /*
-        PacketCraft::Packet testPacket;
-        testPacket.Receive(socketFd, 0);
-        if(testPacket.FindLayerByType(PC_UDP) != nullptr)
-        {
-            testPacket.Print();
-            testPacket.CalculateChecksums();
-            testPacket.Print();
-            close(socketFd);
-            return 0;
-        }
-        */
-        sockaddr_in targetIP{};
-        inet_pton(AF_INET, targetIPStr, &targetIP.sin_addr);
-        
-        PacketCraft::Packet testPacket2;
-        testPacket2.AddLayer(PC_ETHER_II, ETH_HLEN);
-        EthHeader* ethHeader = (EthHeader*)testPacket2.GetLayerStart(0);
-
-        PacketCraft::GetTargetMACAddr(socketFd, interfaceName, targetIP, *(ether_addr*)ethHeader->ether_dhost);
-        PacketCraft::GetMACAddr(*(ether_addr*)ethHeader->ether_shost, interfaceName, socketFd);
-        ethHeader->ether_type = htons(ETH_P_IP);
-
-        sockaddr_in ipSrc{};
-        inet_pton(AF_INET, "10.0.2.9", &ipSrc.sin_addr);
-        sockaddr_in ipDst{};
-        inet_pton(AF_INET, "10.0.2.15", &ipDst.sin_addr);
-
-        const char* msg = "Hi this is a random vitun testi";
-
-        testPacket2.AddLayer(PC_IPV4, sizeof(IPv4Header));
-        IPv4Header* ipv4Header = (IPv4Header*)testPacket2.GetLayerStart(1);
-        ipv4Header->ip_v = 4;
-        ipv4Header->ip_hl = 5;
-        ipv4Header->ip_tos = 0;
-        ipv4Header->ip_id = htons(1);
-        ipv4Header->ip_off = htons(IP_DF);
-        ipv4Header->ip_ttl = 64;
-        ipv4Header->ip_p = 17;
-        ipv4Header->ip_sum = htons(0);
-        ipv4Header->ip_len = htons(20 + PacketCraft::GetStrLen(msg) + sizeof(UDPHeader));
-        memcpy(&ipv4Header->ip_src.s_addr, &ipSrc.sin_addr.s_addr, IPV4_ALEN);
-        memcpy(&ipv4Header->ip_dst.s_addr, &ipDst.sin_addr.s_addr, IPV4_ALEN);
-
-        testPacket2.AddLayer(PC_UDP, sizeof(UDPHeader) + PacketCraft::GetStrLen(msg));
-        UDPHeader* udpHeader = (UDPHeader*)testPacket2.GetLayerStart(2);
-        udpHeader->source = htons(20);
-        udpHeader->dest = htons(10);
-        udpHeader->len = htons(8 + PacketCraft::GetStrLen(msg));
-        udpHeader->check = htons(0);
-        memcpy(udpHeader->data, msg, PacketCraft::GetStrLen(msg));
-
-        testPacket2.Print();
-        testPacket2.CalculateChecksums();
-        testPacket2.Print();
-
-        testPacket2.Send(socketFd, interfaceName, 0);
-
-        return 0;
-    }   
-    //
-
 
     CHaks::FileInterceptor fileInterceptor;
     if(fileInterceptor.Run(socketFd, interfaceName, ipVersion, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)

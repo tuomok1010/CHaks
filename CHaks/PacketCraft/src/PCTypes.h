@@ -123,6 +123,8 @@ struct TCPHeader;
 struct UDPHeader;
 struct DNSHeader;
 struct TCPv4PseudoHeader;
+struct TCPv6PseudoHeader;
 struct UDPv4PseudoHeader;
+struct UDPv6PseudoHeader;
 
 #endif

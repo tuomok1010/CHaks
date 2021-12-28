@@ -255,6 +255,15 @@ struct __attribute__((__packed__)) TCPv4PseudoHeader
     uint16_t tcpLen;
 };
 
+struct __attribute__((__packed__)) TCPv6PseudoHeader
+{
+    struct in6_addr ip6_src;      /* source address */
+    struct in6_addr ip6_dst;      /* destination address */
+    uint32_t tcpLen;
+    uint8_t zeroes[3];
+    uint8_t nextHeader;
+};
+
 struct __attribute__((__packed__)) UDPv4PseudoHeader
 {
     struct in_addr ip_src;  /* source address */
