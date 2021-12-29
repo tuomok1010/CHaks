@@ -92,6 +92,60 @@ int PacketCraft::Packet::AddLayer(const uint32_t layerType, const size_t layerSi
     return NO_ERROR;
 }
 
+// TODO: TEST
+void PacketCraft::Packet::DeleteLayer(const uint32_t layerIndex)
+{
+    uint8_t* newData = (uint8_t*)malloc(IP_MAXPACKET);
+    LayerInfo newLayerInfos[PC_MAX_LAYERS];
+    uint32_t newSizeInBytes{0};
+    uint32_t newNLayers{0};
+
+    start = newData;
+    end = newData;
+
+    for(unsigned int i = 0, j = 0; i < nLayers; ++i)
+    {
+        if(i == layerIndex)
+        {
+            layerInfos[i].start = nullptr;
+            layerInfos[i].end = nullptr;
+            layerInfos[i].type = PC_NONE;
+            layerInfos[i].sizeInBytes = 0;
+            continue;
+        }
+
+        memcpy(end, layerInfos[i].start, layerInfos[i].sizeInBytes);
+        newLayerInfos[j].start = end;
+        newLayerInfos[j].type = layerInfos[i].type;
+        newLayerInfos[j].sizeInBytes = layerInfos[i].sizeInBytes;
+
+
+        end += layerInfos[i].sizeInBytes;
+        newLayerInfos[j].end = end;
+        newSizeInBytes += layerInfos[i].sizeInBytes;
+        ++newNLayers;
+        ++j;
+
+        layerInfos[i].start = nullptr;
+        layerInfos[i].end = nullptr;
+        layerInfos[i].type = PC_NONE;
+        layerInfos[i].sizeInBytes = 0;
+    }
+
+    for(unsigned int i = 0; i < newNLayers; ++i)
+    {
+        layerInfos[i].start = newLayerInfos[i].start;
+        layerInfos[i].end = newLayerInfos[i].end;
+        layerInfos[i].type = newLayerInfos[i].type;
+        layerInfos[i].sizeInBytes = newLayerInfos[i].sizeInBytes;
+    }
+
+    free(data);
+    data = newData;
+    nLayers = newNLayers;
+    sizeInBytes = newSizeInBytes;
+}
+
 int PacketCraft::Packet::Send(const int socket, const char* interfaceName, const int flags) const
 {
     int ifIndex = if_nametoindex(interfaceName);
@@ -127,7 +181,6 @@ int PacketCraft::Packet::Send(const int socket, const char* interfaceName, const
 
     return NO_ERROR;
 }
-
 
 int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTimeoutMS)
 {
@@ -340,7 +393,21 @@ void PacketCraft::Packet::CalculateChecksums()
                     TCPv6PseudoHeader pseudoHeader;
                     memcpy(pseudoHeader.ip6_src.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
                     memcpy(pseudoHeader.ip6_dst.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
-                    pseudoHeader.tcpLen = 
+                    pseudoHeader.tcpLen = htonl(GetLayerSize(i));
+                    memset(pseudoHeader.zeroes, 0, 3);
+                    pseudoHeader.nextHeader = ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+                    size_t dataSize = sizeof(pseudoHeader) + ntohl(pseudoHeader.tcpLen);
+                    if(dataSize % 2 != 0)
+                        dataSize += 1;
+
+                    uint8_t* data = (uint8_t*)malloc(dataSize);
+                    memset(data, 0, dataSize);
+                    memcpy(data, &pseudoHeader, sizeof(pseudoHeader));
+                    memcpy(data + sizeof(pseudoHeader), tcpHeader, ntohs(pseudoHeader.tcpLen));
+
+                    tcpHeader->check = CalculateChecksum(data, dataSize);
+                    free(data);
                 }
 
                 break;

@@ -708,14 +708,12 @@ uint16_t PacketCraft::CalculateChecksum(void* data, size_t sizeInBytes)
 
     while(sizeInBytes > 1)  
     {
-        printf("adding %x\n", *dataPtr16);
         sum += *dataPtr16++;
         sizeInBytes -= 2;
     }
 
     if(sizeInBytes > 0)
     {
-        std::cout << "PacketCraft::CalculateChecksum: sizeInBytes was odd" << std::endl;
         sum += *(uint8_t*)dataPtr16;
     }
 

@@ -30,6 +30,7 @@ namespace PacketCraft
 
         // Check PCTypes.h for valid layerTypes
         int AddLayer(const uint32_t layerType, const size_t layerSize);
+        void DeleteLayer(const uint32_t layerIndex);
         int Send(const int socket, const char* interfaceName, const int flags) const;
         int Receive(const int socketFd, const int flags, int waitTimeoutMS = -1); // negative timeout means we wait forever until a packet is received
         void ResetPacketBuffer();
