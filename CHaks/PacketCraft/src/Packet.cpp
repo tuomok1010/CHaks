@@ -184,7 +184,7 @@ int PacketCraft::Packet::Send(const int socket, const char* interfaceName, const
 
 int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTimeoutMS)
 {
-    uint8_t* packet = (uint8_t*)malloc(IP_MAXPACKET);
+    // uint8_t* packet = (uint8_t*)malloc(IP_MAXPACKET);
     sockaddr fromInfo{};
     socklen_t fromInfoLen{sizeof(fromInfo)};
 
@@ -197,49 +197,49 @@ int PacketCraft::Packet::Receive(const int socketFd, const int flags, int waitTi
     int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), waitTimeoutMS);
     if(nEvents == -1)
     {
-        free(packet);
+        //free(packet);
         // LOG_ERROR(APPLICATION_ERROR, "poll() error!");
         return APPLICATION_ERROR;
     }
     else if(nEvents == 0)
     {
-        free(packet);
+        //free(packet);
         // LOG_ERROR(APPLICATION_ERROR, "poll() timed out.");
         return APPLICATION_ERROR;
     }
     else if(pollFds[0].revents & POLLIN)
     {
-        bytesReceived = recvfrom(socketFd, packet, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
+        ResetPacketBuffer();
+        bytesReceived = recvfrom(socketFd, data, IP_MAXPACKET, flags, &fromInfo, &fromInfoLen);
         if(bytesReceived == -1)
         {
-            free(packet);
+            //free(packet);
             // LOG_ERROR(APPLICATION_ERROR, "recvfrom() error!");
             return APPLICATION_ERROR;
         }
         else if(bytesReceived == 0)
         {
-            free(packet);
+            //free(packet);
             // LOG_ERROR(APPLICATION_ERROR, "0 bytes received error!");
             return APPLICATION_ERROR;
         }
         else
         {
-            ResetPacketBuffer();
-            if(ProcessReceivedPacket(packet, 0) == APPLICATION_ERROR)
+            if(ProcessReceivedPacket((uint8_t*)data, 0) == APPLICATION_ERROR)
             {
-                free(packet);
+                //free(packet);
                 // LOG_ERROR(APPLICATION_ERROR, "ProcessReceivedPacket() error!");
                 return APPLICATION_ERROR;
             }
             else
             {
-                free(packet);
+                //free(packet);
                 return NO_ERROR;
             }
         }
     }
 
-    free(packet);
+    //free(packet);
     // LOG_ERROR(APPLICATION_ERROR, "unknown error!");
     return APPLICATION_ERROR;
 }

@@ -73,12 +73,21 @@ int main(int argc, char** argv)
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
     CHaks::FileInterceptor fileInterceptor;
-    if(fileInterceptor.Run(socketFd, interfaceName, ipVersion, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
+
+    if(fileInterceptor.Init(ipVersion) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
+        close(socketFd);
+        return APPLICATION_ERROR;
+    }
+
+    if(fileInterceptor.Run(socketFd, interfaceName, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
         close(socketFd);
         return APPLICATION_ERROR;
     }
+
 
     close(socketFd);
     return NO_ERROR;    
