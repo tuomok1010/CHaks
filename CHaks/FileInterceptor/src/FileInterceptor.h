@@ -3,11 +3,21 @@
 
 #include "/home/kali/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 
+extern "C"
+{
+#include <libnetfilter_queue/libnetfilter_queue.h>
+#include <libnetfilter_queue/pktbuff.h>
+#include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+#include <libnetfilter_queue/libnetfilter_queue_tcp.h>
+}
+
 namespace CHaks
 {
     class FileInterceptor
     {
         public:
+        #define CMD_LEN 1024
+
         FileInterceptor();
         ~FileInterceptor();
 
@@ -15,6 +25,9 @@ namespace CHaks
 
         int Run(const int socketFd, const char* interfaceName, const char* targetIP, const char* downloadLink, 
             const char* newDownloadLink);
+
+        int Run2(const char* targetIP, const char* downloadLink, const char* newDownloadLink, 
+            int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*));
 
         int FilterRequest(const int socketFd, const char* targetIP, const char* downloadLink, PacketCraft::Packet& httpRequestPacket);
 
@@ -34,6 +47,11 @@ namespace CHaks
 
             EthHeader requestEthHeader;
 
+            const char* tableName{"filter"};
+            const char* chainName{"post_routing_1"}; // rough filter which filters for tcp traffic only
+            int queueNum;
+            nfq_handle* handler;
+            nfq_q_handle* queue;
     };
 }
 

@@ -1,29 +1,158 @@
 #include "FileInterceptor.h"
 
 #include <iostream>
-#include <stdlib.h>
-#include <cstring>
-#include <poll.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <linux/netfilter.h>
+#include <poll.h>
+#include <cstring>
 
 CHaks::FileInterceptor::FileInterceptor() :
     requestAckNum(0),
     requestFiltered(FALSE),
-    ipVersion(0)
+    ipVersion(0),
+    queueNum(0),
+    handler(nullptr),
+    queue(nullptr)
 {
 
 }
 
 CHaks::FileInterceptor::~FileInterceptor()
 {
+    char cmd[CMD_LEN]{};
 
+    snprintf(cmd, CMD_LEN, "nft flush table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    system(cmd);
+
+    memset(cmd, 0, CMD_LEN);
+
+    snprintf(cmd, CMD_LEN, "nft delete table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    system(cmd);
+
+    if(queue != nullptr)
+        nfq_destroy_queue(queue);
+
+    if(handler != nullptr)
+        nfq_close(handler);
 }
 
 int CHaks::FileInterceptor::Init(const uint32_t ipVersion)
 {
     this->ipVersion = ipVersion;
+    char cmd[CMD_LEN]{};
 
+    snprintf(cmd, CMD_LEN, "nft add table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to create nft table");
+        return APPLICATION_ERROR;
+    }
+
+    memset(cmd, 0, CMD_LEN);
+
+    snprintf(cmd, CMD_LEN, "nft 'add chain %s %s %s { type filter hook postrouting priority 0 ; }'", (ipVersion == AF_INET ? "ip" : "ip6"), tableName, chainName);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
+        return APPLICATION_ERROR;
+    }
+
+    memset(cmd, 0, CMD_LEN);
+
+    // this will filter for tcp traffic only
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s %s 6", tableName, chainName, (ipVersion == AF_INET ? "ip" : "ip6"), 
+        (ipVersion == AF_INET ? "protocol" : "nexthdr"));
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add l4proto rule in chain");
+        return APPLICATION_ERROR;
+    }
+
+    memset(cmd, 0, CMD_LEN);
+
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s queue num %d", tableName, chainName, queueNum);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add queue rule in chain");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;
+}
+
+int CHaks::FileInterceptor::Run2(const char* targetIP, const char* downloadLink, const char* newDownloadLink, 
+    int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
+{
+    handler = nfq_open();
+    if(handler == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_open() error");
+        return APPLICATION_ERROR;
+    }
+
+    queue = nfq_create_queue(handler, queueNum, netfilterCallbackFunc, nullptr);
+    if(queue == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_create_queue() error");
+        return APPLICATION_ERROR;
+    }
+
+    if(nfq_set_mode(queue, NFQNL_COPY_PACKET, IP_MAXPACKET) < 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_set_mode() error");
+        return APPLICATION_ERROR;
+    }
+
+    int socketFd = nfq_fd(handler);
+    char buffer[IP_MAXPACKET]{}; // TODO: can we use a PacketCraft::Packet here and pass it to the nfq_handle_packet?
+    struct pollfd pollFds[2];
+
+    pollFds[0].fd = 0;
+    pollFds[0].events = POLLIN;
+    pollFds[1].fd = socketFd;
+    pollFds[1].events = POLLIN;
+
+    std::cout << "running...press enter to stop" << std::endl;
+
+    while(true)
+    {
+        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), -1);
+        if(nEvents == -1)
+        {
+            close(socketFd);
+            LOG_ERROR(APPLICATION_ERROR, "poll() error");
+            return APPLICATION_ERROR;
+        }
+        else if(pollFds[1].revents & POLLIN) // we have a packet in the queue
+        {
+            int len = read(pollFds[1].fd, buffer, IP_MAXPACKET);
+            if(len < 0)
+            {
+                close(socketFd);
+                LOG_ERROR(APPLICATION_ERROR, "read() error");
+                return APPLICATION_ERROR;
+            }
+
+            nfq_handle_packet(handler, buffer, len);
+        }
+        else if(pollFds[0].revents & POLLIN) // user hit a key and wants to quit program
+        {
+            break;
+        }
+        else
+        {
+            close(socketFd);
+            LOG_ERROR(APPLICATION_ERROR, "unknown poll() error!");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    close(socketFd);
+    std::cout << "quitting..." << std::endl;
     return NO_ERROR;
 }
 

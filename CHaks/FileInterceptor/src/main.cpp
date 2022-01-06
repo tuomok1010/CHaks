@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <cstring>
+#include <linux/netfilter.h>
 
 #define DOWNLOAD_LINK_STR_SIZE  512
 
@@ -55,6 +56,28 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
     return NO_ERROR;
 }
 
+static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg, struct nfq_data *nfad, void *data)
+{
+    nfqnl_msg_packet_hdr* ph = nfq_get_msg_packet_hdr(nfad);
+    if(ph == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_get_msg_packet_hdr() error");
+        return -1;
+    }
+
+    unsigned char* rawData = nullptr;
+    int len = nfq_get_payload(nfad, &rawData);
+    if(len < 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_get_payload() error");
+        return -1;
+    }
+
+    std::cout << "packet received: id: " << ntohl(ph->packet_id) << ", bytes: " << len << "\n";
+
+    return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);
+}
+
 int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
@@ -68,7 +91,9 @@ int main(int argc, char** argv)
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
         return APPLICATION_ERROR;
-    } 
+    }
+
+    /*
 
     int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
@@ -90,5 +115,21 @@ int main(int argc, char** argv)
 
 
     close(socketFd);
+
+    */
+
+    CHaks::FileInterceptor fileInterceptor;
+    if(fileInterceptor.Init(ipVersion) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
+        return APPLICATION_ERROR;
+    }
+
+    if(fileInterceptor.Run2(targetIPStr, downloadLink, newDownloadLink, netfilterCallback) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
+        return APPLICATION_ERROR;
+    }
+
     return NO_ERROR;    
 }
