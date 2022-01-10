@@ -751,6 +751,7 @@ int PacketCraft::Packet::Print(bool32 printToFile, const char* fullFilePath) con
 // TODO: extensive testing! This needs to be bulletproof!!!
 int PacketCraft::Packet::ProcessReceivedPacket(uint8_t* packet, int layerSize, unsigned short protocol)
 {
+    std::cout << "in ProcessReceivedPacket, protocol is " << protocol << std::endl;
     switch(protocol)
     {
         case PC_PROTO_ETH:

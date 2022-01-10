@@ -25,12 +25,12 @@ CHaks::FileInterceptor::~FileInterceptor()
 {
     char cmd[CMD_LEN]{};
 
-    snprintf(cmd, CMD_LEN, "nft flush table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    snprintf(cmd, CMD_LEN, "nft flush table %s %s",  ipVersion == AF_INET ? "ip" : "ip6", tableName);
     system(cmd);
 
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft delete table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    snprintf(cmd, CMD_LEN, "nft delete table %s %s",  ipVersion == AF_INET ? "ip" : "ip6", tableName);
     system(cmd);
 
     if(queue != nullptr)
@@ -40,52 +40,55 @@ CHaks::FileInterceptor::~FileInterceptor()
         nfq_close(handler);
 }
 
-int CHaks::FileInterceptor::Init(const uint32_t ipVersion)
+int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP, const char* downloadLink, const char* newDownloadLink)
 {
-    this->ipVersion = ipVersion;
+    this->ipVersion = ipVersion; // TODO: obsolete because ip is now passed in callbackData. remove when ready
+
+    callbackData.ipVersion = ipVersion;
+    PacketCraft::CopyStr(callbackData.targetIPStr, INET6_ADDRSTRLEN, targetIP);
+    PacketCraft::CopyStr(callbackData.downloadLink, DOWNLOAD_LINK_STR_SIZE, downloadLink);
+    PacketCraft::CopyStr(callbackData.newDownloadLink, DOWNLOAD_LINK_STR_SIZE, newDownloadLink);
+
     char cmd[CMD_LEN]{};
 
-    snprintf(cmd, CMD_LEN, "nft add table %s %s", (ipVersion == AF_INET ? "ip" : "ip6"), tableName);
+    snprintf(cmd, CMD_LEN, "nft add table %s %s", ipVersion == AF_INET ? "ip" : "ip6", tableName);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to create nft table");
         return APPLICATION_ERROR;
     }
-
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft 'add chain %s %s %s { type filter hook postrouting priority 0 ; }'", (ipVersion == AF_INET ? "ip" : "ip6"), tableName, chainName);
+    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook postrouting priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
         return APPLICATION_ERROR;
     }
-
     memset(cmd, 0, CMD_LEN);
 
-    // this will filter for tcp traffic only
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s %s 6", tableName, chainName, (ipVersion == AF_INET ? "ip" : "ip6"), 
-        (ipVersion == AF_INET ? "protocol" : "nexthdr"));
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName);
     if(system(cmd) != 0)
     {
-        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add l4proto rule in chain");
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add meta rules in chain");
         return APPLICATION_ERROR;
     }
-
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s queue num %d", tableName, chainName, queueNum);
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s queue num %d", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName, queueNum);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add queue rule in chain");
         return APPLICATION_ERROR;
     }
 
+    std::cout << "chain created:\n";
+    system("nft list ruleset");
+
     return NO_ERROR;
 }
 
-int CHaks::FileInterceptor::Run2(const char* targetIP, const char* downloadLink, const char* newDownloadLink, 
-    int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
+int CHaks::FileInterceptor::Run2(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
 {
     handler = nfq_open();
     if(handler == nullptr)
@@ -94,7 +97,7 @@ int CHaks::FileInterceptor::Run2(const char* targetIP, const char* downloadLink,
         return APPLICATION_ERROR;
     }
 
-    queue = nfq_create_queue(handler, queueNum, netfilterCallbackFunc, nullptr);
+    queue = nfq_create_queue(handler, queueNum, netfilterCallbackFunc, &callbackData);
     if(queue == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "nfq_create_queue() error");
