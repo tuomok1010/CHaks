@@ -60,7 +60,8 @@ namespace CHaks
             NetFilterCallbackData callbackData;
 
             const char* tableName{"filter"};
-            const char* chainName{"post_routing_1"}; // rough filter which filters for tcp traffic only
+            const char* chain1Name{"post_routing"};
+            const char* chain2Name{"pre_routing"};
             int queueNum;
             nfq_handle* handler;
             nfq_q_handle* queue;

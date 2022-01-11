@@ -59,7 +59,8 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP,
     }
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook postrouting priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName);
+    // Add chain 1(postrouting) and rules to it
+    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook input priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
@@ -67,7 +68,7 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP,
     }
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName);
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add meta rules in chain");
@@ -75,14 +76,40 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP,
     }
     memset(cmd, 0, CMD_LEN);
 
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s queue num %d", ipVersion == AF_INET ? "ip" : "ip6", tableName, chainName, queueNum);
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s queue num %d", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name, queueNum);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add queue rule in chain");
         return APPLICATION_ERROR;
     }
+    //////////////////////////////////////
 
-    std::cout << "chain created:\n";
+    // Add chain 2(prerouting) and rules to it
+    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook output priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
+        return APPLICATION_ERROR;
+    }
+    memset(cmd, 0, CMD_LEN);
+
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add meta rules in chain");
+        return APPLICATION_ERROR;
+    }
+    memset(cmd, 0, CMD_LEN);
+
+    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s queue num %d", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name, queueNum);
+    if(system(cmd) != 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add queue rule in chain");
+        return APPLICATION_ERROR;
+    }
+    //////////////////////////////////////
+
+    std::cout << "chains created:\n";
     system("nft list ruleset");
 
     return NO_ERROR;
