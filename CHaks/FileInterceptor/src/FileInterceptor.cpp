@@ -10,6 +10,105 @@
 #include <poll.h>
 #include <cstring>
 
+ static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl)
+ {
+        char buf[MNL_SOCKET_BUFFER_SIZE];
+        nlmsghdr *nlh;
+        nlattr *nest;
+
+        nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
+        nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
+
+        /* example to set the connmark. First, start NFQA_CT section: */
+        nest = mnl_attr_nest_start(nlh, NFQA_CT);
+
+        /* then, add the connmark attribute: */
+        mnl_attr_put_u32(nlh, CTA_MARK, htonl(42));
+        /* more conntrack attributes, e.g. CTA_LABELS could be set here */
+
+        /* end conntrack section */
+        mnl_attr_nest_end(nlh, nest);
+
+        if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+        {
+            LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
+            return APPLICATION_ERROR;
+        }
+ }
+
+ static int queueCallback(const nlmsghdr *nlh, void *data)
+ {
+    nfqnl_msg_packet_hdr* ph{nullptr};
+    nlattr* attr[NFQA_MAX + 1]{};
+    uint32_t id{0};
+    uint32_t skbInfo{0};
+    nfgenmsg*nfg{nullptr};
+    uint16_t plen{0};
+
+    mnl_socket* nl = (mnl_socket*)data;
+
+    if(nfq_nlmsg_parse(nlh, attr) < 0) 
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_nlmsg_parse() error");
+        return MNL_CB_ERROR;
+    }
+
+    nfg = (nfgenmsg*)mnl_nlmsg_get_payload(nlh);
+    if(nfg == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "mnl_nlmsg_get_payload() error");
+        return MNL_CB_ERROR;
+    }
+
+    if(attr[NFQA_PACKET_HDR] == NULL) 
+    {
+        LOG_ERROR(APPLICATION_ERROR, "metaheader not set");
+        return MNL_CB_ERROR;
+    }
+
+    ph = (nfqnl_msg_packet_hdr*)mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
+    if(ph == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "mnl_attr_get_payload() error");
+        return MNL_CB_ERROR;
+    }
+    plen = mnl_attr_get_payload_len(attr[NFQA_PAYLOAD]);
+
+    skbInfo = attr[NFQA_SKB_INFO] ? ntohl(mnl_attr_get_u32(attr[NFQA_SKB_INFO])) : 0;
+
+    if(attr[NFQA_CAP_LEN]) 
+    {
+        uint32_t origLen = ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN]));
+        if (origLen != plen)
+                printf("truncated ");
+    }
+
+    if(skbInfo & NFQA_SKB_GSO)
+        printf("GSO ");
+
+    id = ntohl(ph->packet_id);
+    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u", id, ntohs(ph->hw_protocol), ph->hook, plen);
+
+        /*
+    * ip/tcp checksums are not yet valid, e.g. due to GRO/GSO.
+    * The application should behave as if the checksums are correct.
+    *
+    * If these packets are later forwarded/sent out, the checksums will
+    * be corrected by kernel/hardware.
+    */
+    if (skbInfo & NFQA_SKB_CSUMNOTREADY)
+            printf(", checksum not ready");
+    puts(")");
+
+    if(nfq_send_verdict(ntohs(nfg->res_id), id, nl) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+        return MNL_CB_ERROR;
+    }
+
+    return MNL_CB_OK;
+ }
+
 CHaks::FileInterceptor::FileInterceptor() :
     requestAckNum(0),
     requestFiltered(FALSE),
@@ -40,14 +139,17 @@ CHaks::FileInterceptor::~FileInterceptor()
         nfq_close(handler);
 }
 
-int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP, const char* downloadLink, const char* newDownloadLink)
+int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interfaceName, const char* targetIP, const char* downloadLink, const char* newDownloadLink,
+    int queueNum)
 {
     this->ipVersion = ipVersion; // TODO: obsolete because ip is now passed in callbackData. remove when ready
+    this->queueNum = queueNum;
 
     callbackData.ipVersion = ipVersion;
     PacketCraft::CopyStr(callbackData.targetIPStr, INET6_ADDRSTRLEN, targetIP);
     PacketCraft::CopyStr(callbackData.downloadLink, DOWNLOAD_LINK_STR_SIZE, downloadLink);
     PacketCraft::CopyStr(callbackData.newDownloadLink, DOWNLOAD_LINK_STR_SIZE, newDownloadLink);
+    PacketCraft::CopyStr(callbackData.interfaceName, IFNAMSIZ, interfaceName);
 
     char cmd[CMD_LEN]{};
 
@@ -115,7 +217,111 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* targetIP,
     return NO_ERROR;
 }
 
-int CHaks::FileInterceptor::Run2(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
+int CHaks::FileInterceptor::RunTest()
+{
+    char* buffer{nullptr};
+    nlmsghdr* nlh{nullptr};
+    /* largest possible packet payload, plus netlink data overhead: */
+    size_t bufferSize = 0xffff + (MNL_SOCKET_BUFFER_SIZE/2);
+    int res;
+
+    nl = mnl_socket_open(NETLINK_NETFILTER);
+    if(nl == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "mnl_socket_open() error");
+        return APPLICATION_ERROR;
+    }
+
+    if(mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) 
+    {
+        mnl_socket_close(nl);
+        LOG_ERROR(APPLICATION_ERROR, "mnl_socket_bind() error");
+        return APPLICATION_ERROR;
+    }
+
+    portId = mnl_socket_get_portid(nl);
+
+    buffer = (char*)malloc(bufferSize);
+    if(!buffer) 
+    {
+        mnl_socket_close(nl);
+        LOG_ERROR(APPLICATION_ERROR, "malloc() error");
+        return APPLICATION_ERROR;
+    }
+
+    nlh = nfq_nlmsg_put(buffer, NFQNL_MSG_CONFIG, queueNum);
+    if(nlh == nullptr)
+    {
+        mnl_socket_close(nl);
+        free(buffer);
+        LOG_ERROR(APPLICATION_ERROR, "nfq_nlmsg_put() error");
+        return APPLICATION_ERROR;
+    }
+
+    nfq_nlmsg_cfg_put_cmd(nlh, ipVersion, NFQNL_CFG_CMD_BIND);
+
+    if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+    {
+        mnl_socket_close(nl);
+        free(buffer);
+        LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
+        return APPLICATION_ERROR;
+    }
+ 
+    nlh = nfq_nlmsg_put(buffer, NFQNL_MSG_CONFIG, queueNum);
+    if(nlh == nullptr)
+    {
+        mnl_socket_close(nl);
+        free(buffer);
+        LOG_ERROR(APPLICATION_ERROR, "nfq_nlmsg_put() error");
+        return APPLICATION_ERROR;
+    }
+
+    nfq_nlmsg_cfg_put_params(nlh, NFQNL_COPY_PACKET, IP_MAXPACKET);
+    mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
+    mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
+
+    if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+    {
+        mnl_socket_close(nl);
+        free(buffer);
+        LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
+        return APPLICATION_ERROR;
+    }
+
+    /* ENOBUFS is signalled to userspace when packets were lost
+    * on kernel side.  In most cases, userspace isn't interested
+    * in this information, so turn it off.
+    */
+    res = 1;
+    mnl_socket_setsockopt(nl, NETLINK_NO_ENOBUFS, &res, sizeof(int));
+
+    while(true) // TODO: use poll to monitor console input, test if mnl_socket works with poll()
+    {
+        res = mnl_socket_recvfrom(nl, buffer, bufferSize);
+        if (res == -1) 
+        {
+            mnl_socket_close(nl);
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "mnl_socket_recvfrom() error");
+            return APPLICATION_ERROR;
+        }
+
+        res = mnl_cb_run(buffer, res, 0, portId, queueCallback, nl);
+        if (res < 0)
+        {
+            mnl_socket_close(nl);
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "mnl_cb_run() error");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    mnl_socket_close(nl);
+    free(buffer);
+}
+
+int CHaks::FileInterceptor::Run(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
 {
     handler = nfq_open();
     if(handler == nullptr)
@@ -183,311 +389,5 @@ int CHaks::FileInterceptor::Run2(int (*netfilterCallbackFunc)(nfq_q_handle*, nfg
 
     close(socketFd);
     std::cout << "quitting..." << std::endl;
-    return NO_ERROR;
-}
-
-int CHaks::FileInterceptor::Run(const int socketFd, const char* interfaceName, const char* targetIP, 
-    const char* downloadLink, const char* newDownloadLink)
-{
-    pollfd pollFds[2]{};
-
-    // we want to monitor console input, entering something there stops the program
-    pollFds[0].fd = 0;
-    pollFds[0].events = POLLIN;
-
-    pollFds[1].fd = socketFd;
-    pollFds[1].events = POLLIN;
-
-    PacketCraft::Packet httpRequestPacket;
-    PacketCraft::Packet httpResponsePacket;
-
-    std::cout << "waiting for packets... press enter to stop\n" << std::endl;
-
-    while(true)
-    {
-        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), -1);
-        if(nEvents == -1)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "poll() error!");
-            return APPLICATION_ERROR;
-        }
-        else if(nEvents == 0)
-        {
-            LOG_ERROR(APPLICATION_ERROR, "poll() timeout!");
-            return APPLICATION_ERROR;
-        }
-        else
-        {
-            if(pollFds[0].revents & POLLIN)
-            {
-                std::cout << "quitting...\n";
-                return NO_ERROR;
-            }
-            else if(pollFds[1].revents & POLLIN)
-            {   
-                // NOTE: requestAckNum gets set in FilterRequest
-                if(FilterRequest(socketFd, targetIP, downloadLink, httpRequestPacket) == NO_ERROR)
-                {
-                    std::cout << "request filtered:\n";
-                    httpRequestPacket.Print();
-                    requestFiltered = TRUE;
-
-                    EthHeader* reqEthHeader = (EthHeader*)httpRequestPacket.GetLayerStart(0);
-                    memcpy(requestEthHeader.ether_dhost, reqEthHeader->ether_dhost, ETH_ALEN);
-                    memcpy(requestEthHeader.ether_shost, reqEthHeader->ether_shost, ETH_ALEN);
-                    requestEthHeader.ether_type = reqEthHeader->ether_type;
-                }
-
-                if(requestFiltered == TRUE)
-                {
-                    if(FilterResponse(socketFd, targetIP, httpResponsePacket) == NO_ERROR)
-                    {
-                        std::cout << "original response:\n";
-                        httpResponsePacket.Print();
-
-                        PacketCraft::Packet newResponse;
-                        CreateResponse(httpResponsePacket, newResponse, newDownloadLink);
-
-                        std::cout << "new response:\n";
-                        newResponse.Print();
-
-                        if(newResponse.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
-                        {
-                            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() errpr");
-                            return APPLICATION_ERROR;
-                        }
-
-                        requestFiltered = FALSE;
-                    }
-                }
-            }
-        }
-    }
-}
-
-int CHaks::FileInterceptor::FilterRequest(const int socketFd, const char* targetIP, const char* downloadLink, PacketCraft::Packet& httpRequestPacket)
-{
-    if(httpRequestPacket.Receive(socketFd, 0) == APPLICATION_ERROR)
-    {
-        // LOG_ERROR(APPLICATION_WARNING, "PacketCraft::Packet::Receive() error");
-        return APPLICATION_WARNING;
-    }
-
-    char* httpRequest = (char*)httpRequestPacket.FindLayerByType(PC_HTTP_REQUEST);
-    if(httpRequest != nullptr)
-    {
-        if(PacketCraft::GetHTTPMethod((uint8_t*)httpRequest) == PC_HTTP_GET)
-        {
-            // check that IP matches the desired target
-            if(ipVersion == AF_INET)
-            {
-                sockaddr_in targetIPAddr{};
-                if(inet_pton(AF_INET, targetIP, &targetIPAddr.sin_addr) == -1)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
-                    return APPLICATION_ERROR;
-                }
-
-                IPv4Header* ipv4Header = (IPv4Header*)httpRequestPacket.FindLayerByType(PC_IPV4);
-                if(ipv4Header->ip_src.s_addr != targetIPAddr.sin_addr.s_addr)
-                    return APPLICATION_WARNING;
-            }
-            else
-            {
-                sockaddr_in6 targetIPAddr{};
-                if(inet_pton(AF_INET6, targetIP, &targetIPAddr.sin6_addr) == -1)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
-                    return APPLICATION_ERROR;
-                }
-
-                IPv6Header* ipv6Header = (IPv6Header*)httpRequestPacket.FindLayerByType(PC_IPV6);
-                if(memcmp(ipv6Header->ip6_src.__in6_u.__u6_addr8, targetIPAddr.sin6_addr.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-                    return APPLICATION_WARNING;
-            }
-            ////////////////////
-
-            char packetFileName[255]{};
-            char packetDomainName[255]{};
-            char packetDownloadLink[1024]{};
-
-            char buffer[255]{};
-
-            // Copy the first line of the http request in buffer. Should be something like this: "GET /test/file.php HTTP/1.1"
-            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), httpRequest, '\n');
-
-            int filePathStartIndex = 4;
-            int filePathEndIndex = PacketCraft::FindInStr(buffer, " HTTP");
-            memcpy(packetFileName, buffer + filePathStartIndex, filePathEndIndex - filePathStartIndex);
-            memset(buffer, '\0', sizeof(buffer));
-            packetFileName[filePathEndIndex] = '\0';
-
-            // Copy the line containing the host domain name in buffer. Should be something like this: "Host: example.test.com"
-            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), httpRequest + PacketCraft::FindInStr(httpRequest, "Host: "), '\n');
-
-            int domainStartIndex = 6;
-            int domainEndIndex = PacketCraft::FindInStr(buffer, "\r\n");
-            memcpy(packetDomainName, buffer + domainStartIndex, domainEndIndex - domainStartIndex);
-            memset(buffer, '\0', sizeof(buffer));
-            packetDomainName[domainEndIndex] = '\0';
-
-            PacketCraft::ConcatStr(packetDownloadLink, sizeof(packetDownloadLink), packetDomainName, packetFileName);
-
-            if(PacketCraft::CompareStr(packetDownloadLink, downloadLink) == TRUE)
-            {
-                TCPHeader* tcpHeader = (TCPHeader*)httpRequestPacket.FindLayerByType(PC_TCP);
-                if(tcpHeader == nullptr)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::FindLayerByType() error");
-                    return APPLICATION_ERROR;
-                }
-
-                // valid request found
-                requestAckNum = tcpHeader->ack_seq;
-                return NO_ERROR;
-            }
-        }
-    }
-
-    return APPLICATION_WARNING;
-}
-
-int CHaks::FileInterceptor::FilterResponse(const int socketFd, const char* targetIP, PacketCraft::Packet& httpResponsePacket)
-{
-    if(httpResponsePacket.Receive(socketFd, 0) == APPLICATION_ERROR)
-    {
-        // LOG_ERROR(APPLICATION_WARNING, "PacketCraft::Packet::Receive() error");
-        return APPLICATION_WARNING;
-    }
-
-    char* httpResponse = (char*)httpResponsePacket.FindLayerByType(PC_HTTP_RESPONSE);
-    if(httpResponse != nullptr)
-    {
-        if(PacketCraft::GetHTTPMethod((uint8_t*)httpResponse) == PC_HTTP_SUCCESS)
-        {
-            // check that IP matches the desired target
-            if(ipVersion == AF_INET)
-            {
-                sockaddr_in targetIPAddr{};
-                if(inet_pton(AF_INET, targetIP, &targetIPAddr.sin_addr) == -1)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
-                    return APPLICATION_ERROR;
-                }
-
-                IPv4Header* ipv4Header = (IPv4Header*)httpResponsePacket.FindLayerByType(PC_IPV4);
-                if(ipv4Header->ip_dst.s_addr != targetIPAddr.sin_addr.s_addr)
-                    return APPLICATION_WARNING;
-            }
-            else
-            {
-                sockaddr_in6 targetIPAddr{};
-                if(inet_pton(AF_INET6, targetIP, &targetIPAddr.sin6_addr) == -1)
-                {
-                    LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
-                    return APPLICATION_ERROR;
-                }
-
-                IPv6Header* ipv6Header = (IPv6Header*)httpResponsePacket.FindLayerByType(PC_IPV6);
-                if(memcmp(ipv6Header->ip6_dst.__in6_u.__u6_addr8, targetIPAddr.sin6_addr.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-                    return APPLICATION_WARNING;
-            }
-            ////////////////////
-
-            TCPHeader* tcpHeader = (TCPHeader*)httpResponsePacket.FindLayerByType(PC_TCP);
-            if(tcpHeader == nullptr)
-            {
-                LOG_ERROR(APPLICATION_ERROR, "could not find tcp layer");
-                return APPLICATION_ERROR;
-            }
-
-            // response matching the original request found
-            if(tcpHeader->seq == requestAckNum)
-                return NO_ERROR;
-        }
-    }
-
-    return APPLICATION_WARNING;
-}
-
-int CHaks::FileInterceptor::CreateResponse(const PacketCraft::Packet& originalResponse, PacketCraft::Packet& newResponse, const char* newDownloadLink) const
-{
-    newResponse.AddLayer(PC_ETHER_II, ETH_HLEN);
-    EthHeader* newResponseEthHeader = (EthHeader*)newResponse.GetLayerStart(0);
-    memcpy(newResponseEthHeader->ether_dhost, requestEthHeader.ether_shost, ETH_ALEN);
-    memcpy(newResponseEthHeader->ether_shost, requestEthHeader.ether_dhost, ETH_ALEN);
-    newResponseEthHeader->ether_type = requestEthHeader.ether_type;
-
-    if(ipVersion == AF_INET)
-    {
-        IPv4Header* originalResponseIPv4Header = (IPv4Header*)originalResponse.FindLayerByType(PC_IPV4);
-        newResponse.AddLayer(PC_IPV4, sizeof(IPv4Header));
-        IPv4Header* newResponseIPv4Header = (IPv4Header*)newResponse.FindLayerByType(PC_IPV4);
-        newResponseIPv4Header->ip_v = originalResponseIPv4Header->ip_v;
-        newResponseIPv4Header->ip_hl = 5;
-        newResponseIPv4Header->ip_tos = 0;
-        newResponseIPv4Header->ip_len = htons(0); // calculated after packet has been constructed completely
-        newResponseIPv4Header->ip_id = originalResponseIPv4Header->ip_id;
-        newResponseIPv4Header->ip_off = IP_DF;
-        newResponseIPv4Header->ip_ttl = originalResponseIPv4Header->ip_ttl;
-        newResponseIPv4Header->ip_p = originalResponseIPv4Header->ip_p;
-        newResponseIPv4Header->ip_sum = htons(0);
-        newResponseIPv4Header->ip_src.s_addr = originalResponseIPv4Header->ip_src.s_addr;
-        newResponseIPv4Header->ip_dst.s_addr = originalResponseIPv4Header->ip_dst.s_addr;
-    }
-    else
-    {
-        IPv6Header* originalResponseIPv6Header = (IPv6Header*)originalResponse.FindLayerByType(PC_IPV6);
-        newResponse.AddLayer(PC_IPV6, sizeof(IPv6Header));
-        IPv6Header* newResponseIPv6Header = (IPv6Header*)newResponse.FindLayerByType(PC_IPV6);
-        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow = originalResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_flow;
-        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim = originalResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_hlim;
-        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt = IPPROTO_TCP;
-        newResponseIPv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(0); // calculated after packet has been constructed completely
-        memcpy(newResponseIPv6Header->ip6_src.__in6_u.__u6_addr8, originalResponseIPv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN);
-        memcpy(newResponseIPv6Header->ip6_dst.__in6_u.__u6_addr8, originalResponseIPv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN);
-    }
-
-    TCPHeader* originalResponseTCPHeader = (TCPHeader*)originalResponse.FindLayerByType(PC_TCP);
-    newResponse.AddLayer(PC_TCP, sizeof(TCPHeader));
-    TCPHeader* newResponseTCPHeader = (TCPHeader*)newResponse.FindLayerByType(PC_TCP);
-    newResponseTCPHeader->source = originalResponseTCPHeader->source;
-    newResponseTCPHeader->dest = originalResponseTCPHeader->dest;
-    newResponseTCPHeader->seq = originalResponseTCPHeader->seq;
-    newResponseTCPHeader->ack_seq = originalResponseTCPHeader->ack_seq;
-    newResponseTCPHeader->doff = originalResponseTCPHeader->doff;
-    newResponseTCPHeader->res1 = originalResponseTCPHeader->res1;
-    newResponseTCPHeader->fin = originalResponseTCPHeader->fin;
-    newResponseTCPHeader->syn = originalResponseTCPHeader->syn;
-    newResponseTCPHeader->rst = originalResponseTCPHeader->rst;
-    newResponseTCPHeader->psh = originalResponseTCPHeader->psh;
-    newResponseTCPHeader->ack = originalResponseTCPHeader->ack;
-    newResponseTCPHeader->urg = originalResponseTCPHeader->urg;
-    newResponseTCPHeader->res2 = originalResponseTCPHeader->res2;
-    newResponseTCPHeader->window = originalResponseTCPHeader->window;
-    newResponseTCPHeader->check = htons(0);
-    newResponseTCPHeader->urg_ptr = originalResponseTCPHeader->urg_ptr;
-
-    const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
-    uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
-    char* fullHTTPCode = (char*)malloc(responseCodeLen);
-    PacketCraft::ConcatStr(fullHTTPCode, responseCodeLen, httpStatusCode, newDownloadLink);
-
-    newResponse.AddLayer(PC_HTTP_RESPONSE, responseCodeLen - 1);
-    memcpy(newResponse.GetLayerStart(newResponse.GetNLayers() - 1), fullHTTPCode, responseCodeLen - 1);
-
-    if(ipVersion == AF_INET)
-    {
-        IPv4Header* ipv4Header = (IPv4Header*)newResponse.FindLayerByType(PC_IPV4);
-        ipv4Header->ip_len = htons(newResponse.GetSizeInBytes() - ETH_HLEN);
-    }
-    else
-    {
-        IPv6Header* ipv6Header = (IPv6Header*)newResponse.FindLayerByType(PC_IPV6);
-        ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(newResponse.GetSizeInBytes() - sizeof(EthHeader) - sizeof(IPv6Header)); // TODO: test
-    }
-
-    newResponse.CalculateChecksums();
-
     return NO_ERROR;
 }

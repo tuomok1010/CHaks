@@ -10,6 +10,8 @@ extern "C"
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
+#include <libmnl/libmnl.h>
+#include <linux/netfilter/nfnetlink_conntrack.h>
 }
 
 #define DOWNLOAD_LINK_STR_SIZE  512
@@ -22,6 +24,7 @@ namespace CHaks
         char targetIPStr[INET6_ADDRSTRLEN]{};
         char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
         char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
+        char interfaceName[IFNAMSIZ]{};
     };
 
     class FileInterceptor
@@ -32,20 +35,12 @@ namespace CHaks
         FileInterceptor();
         ~FileInterceptor();
 
-        int Init(const uint32_t ipVersion, const char* targetIP, const char* downloadLink, const char* newDownloadLink);
+        int Init(const uint32_t ipVersion, const char* interfaceName, const char* targetIP, const char* downloadLink, const char* newDownloadLink, int queueNum);
 
-        int Run(const int socketFd, const char* interfaceName, const char* targetIP, const char* downloadLink, 
-            const char* newDownloadLink);
+        int Run(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*));
 
-        int Run2(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*));
+        int RunTest();
 
-        int FilterRequest(const int socketFd, const char* targetIP, const char* downloadLink, PacketCraft::Packet& httpRequestPacket);
-
-        int FilterResponse(const int socketFd, const char* targetIP, PacketCraft::Packet& httpResponsePacket);
-
-        int ModifyResponse(PacketCraft::Packet& httpResponse, const char* newDownloadLink) const;
-
-        int CreateResponse(const PacketCraft::Packet& originalResponse, PacketCraft::Packet& newResponse, const char* newDownloadLink) const;
 
         private:
             // we can filter the correct response using this number. If the sequence number of the response matches with
@@ -62,7 +57,10 @@ namespace CHaks
             const char* tableName{"filter"};
             const char* chain1Name{"post_routing"};
             const char* chain2Name{"pre_routing"};
-            int queueNum;
+            uint32_t queueNum;
+            uint32_t portId;
+            mnl_socket *nl;
+
             nfq_handle* handler;
             nfq_q_handle* queue;
     };
