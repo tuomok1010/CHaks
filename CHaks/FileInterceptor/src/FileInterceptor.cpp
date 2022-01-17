@@ -12,38 +12,39 @@
 
  static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl)
  {
-        char buf[MNL_SOCKET_BUFFER_SIZE];
-        nlmsghdr *nlh;
-        nlattr *nest;
+    char buf[MNL_SOCKET_BUFFER_SIZE];
+    nlmsghdr* nlh;
+    nlattr* nest;
 
-        nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
-        nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
+    nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
+    nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
 
-        /* example to set the connmark. First, start NFQA_CT section: */
-        nest = mnl_attr_nest_start(nlh, NFQA_CT);
 
-        /* then, add the connmark attribute: */
-        mnl_attr_put_u32(nlh, CTA_MARK, htonl(42));
-        /* more conntrack attributes, e.g. CTA_LABELS could be set here */
 
-        /* end conntrack section */
-        mnl_attr_nest_end(nlh, nest);
+    /* example to set the connmark. First, start NFQA_CT section: */
+    nest = mnl_attr_nest_start(nlh, NFQA_CT);
 
-        if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
-        {
-            LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
-            return APPLICATION_ERROR;
-        }
+    /* then, add the connmark attribute: */
+    mnl_attr_put_u32(nlh, CTA_MARK, htonl(42));
+    /* more conntrack attributes, e.g. CTA_LABELS could be set here */
+
+    /* end conntrack section */
+    mnl_attr_nest_end(nlh, nest);
+
+    if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+    {
+        LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
+        return APPLICATION_ERROR;
+    }
+
+    return NO_ERROR;
  }
 
  static int queueCallback(const nlmsghdr *nlh, void *data)
  {
     nfqnl_msg_packet_hdr* ph{nullptr};
     nlattr* attr[NFQA_MAX + 1]{};
-    uint32_t id{0};
-    uint32_t skbInfo{0};
     nfgenmsg*nfg{nullptr};
-    uint16_t plen{0};
 
     mnl_socket* nl = (mnl_socket*)data;
 
@@ -69,38 +70,52 @@
     ph = (nfqnl_msg_packet_hdr*)mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
     if(ph == nullptr)
     {
-        LOG_ERROR(APPLICATION_ERROR, "mnl_attr_get_payload() error");
+        LOG_ERROR(APPLICATION_ERROR, "mnl_attr_get_payload() NFQA_PACKET_HDR error");
         return MNL_CB_ERROR;
     }
+
+    uint16_t plen{0};
+    uint8_t* payload{nullptr};
+
     plen = mnl_attr_get_payload_len(attr[NFQA_PAYLOAD]);
-
-    skbInfo = attr[NFQA_SKB_INFO] ? ntohl(mnl_attr_get_u32(attr[NFQA_SKB_INFO])) : 0;
-
-    if(attr[NFQA_CAP_LEN]) 
+    payload = (uint8_t*)mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
+    if(payload == nullptr)
     {
-        uint32_t origLen = ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN]));
-        if (origLen != plen)
-                printf("truncated ");
+        LOG_ERROR(APPLICATION_ERROR, "mnl_attr_get_payload() NFQA_PAYLOAD error");
+        return MNL_CB_ERROR;
     }
 
-    if(skbInfo & NFQA_SKB_GSO)
-        printf("GSO ");
+    uint32_t ipVersion{};
+    if(ntohs(ph->hw_protocol) == ETH_P_IP)
+        ipVersion = AF_INET;
+    else if(ntohs(ph->hw_protocol) == ETH_P_IPV6)
+        ipVersion = AF_INET6;
 
-    id = ntohl(ph->packet_id);
-    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u", id, ntohs(ph->hw_protocol), ph->hook, plen);
+    pkt_buff* pkBuff = pktb_alloc(ipVersion, payload, plen, 255);
+    if(pkBuff == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "pktb_alloc() error");
+        return MNL_CB_ERROR;
+    }
 
-        /*
-    * ip/tcp checksums are not yet valid, e.g. due to GRO/GSO.
-    * The application should behave as if the checksums are correct.
-    *
-    * If these packets are later forwarded/sent out, the checksums will
-    * be corrected by kernel/hardware.
-    */
-    if (skbInfo & NFQA_SKB_CSUMNOTREADY)
-            printf(", checksum not ready");
-    puts(")");
+    iphdr* ipv4Header{nullptr};
+    ip6_hdr* ipv6Header{nullptr};
+    tcphdr* tcpHeader{nullptr};
 
-    if(nfq_send_verdict(ntohs(nfg->res_id), id, nl) == APPLICATION_ERROR)
+    if(ipVersion == AF_INET)
+    {
+
+    }
+    else if(ipVersion == AF_INET6)
+    {
+
+    }
+
+
+
+    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+
+    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), nl) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
         return MNL_CB_ERROR;
@@ -296,29 +311,59 @@ int CHaks::FileInterceptor::RunTest()
     res = 1;
     mnl_socket_setsockopt(nl, NETLINK_NO_ENOBUFS, &res, sizeof(int));
 
-    while(true) // TODO: use poll to monitor console input, test if mnl_socket works with poll()
+    pollfd pollFds[2]{-1, -1};
+    pollFds[0].fd = 0;
+    pollFds[0].events = POLLIN;
+    pollFds[1].fd = mnl_socket_get_fd(nl);
+    pollFds[1].events = POLLIN;
+
+    while(true)
     {
-        res = mnl_socket_recvfrom(nl, buffer, bufferSize);
-        if (res == -1) 
+        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), -1);
+        if(nEvents == -1)
         {
             mnl_socket_close(nl);
             free(buffer);
-            LOG_ERROR(APPLICATION_ERROR, "mnl_socket_recvfrom() error");
+            LOG_ERROR(APPLICATION_ERROR, "poll() error");
+            return APPLICATION_ERROR;
+        }
+        else if(pollFds[1].revents & POLLIN) // we have a packet in the queue
+        {
+            res = mnl_socket_recvfrom(nl, buffer, bufferSize);
+            if (res == -1) 
+            {
+                mnl_socket_close(nl);
+                free(buffer);
+                LOG_ERROR(APPLICATION_ERROR, "mnl_socket_recvfrom() error");
+                return APPLICATION_ERROR;
+            }
+
+            res = mnl_cb_run(buffer, res, 0, portId, queueCallback, nl);
+            if (res < 0)
+            {
+                mnl_socket_close(nl);
+                free(buffer);
+                LOG_ERROR(APPLICATION_ERROR, "mnl_cb_run() error");
+                return APPLICATION_ERROR;
+            }
+        }
+        else if(pollFds[0].revents & POLLIN) // user hit a key and wants to quit program
+        {
+            break;
+        }
+        else
+        {
+            mnl_socket_close(nl);
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "unknown poll() error!");
             return APPLICATION_ERROR;
         }
 
-        res = mnl_cb_run(buffer, res, 0, portId, queueCallback, nl);
-        if (res < 0)
-        {
-            mnl_socket_close(nl);
-            free(buffer);
-            LOG_ERROR(APPLICATION_ERROR, "mnl_cb_run() error");
-            return APPLICATION_ERROR;
-        }
     }
 
     mnl_socket_close(nl);
     free(buffer);
+    return NO_ERROR;
 }
 
 int CHaks::FileInterceptor::Run(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
