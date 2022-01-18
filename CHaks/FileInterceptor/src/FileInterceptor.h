@@ -20,7 +20,8 @@ namespace CHaks
 {
     struct NetFilterCallbackData
     {
-        uint32_t ipVersion{};
+        mnl_socket *nl;
+        uint32_t ipVersion;
         char targetIPStr[INET6_ADDRSTRLEN]{};
         char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
         char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
@@ -36,10 +37,7 @@ namespace CHaks
         ~FileInterceptor();
 
         int Init(const uint32_t ipVersion, const char* interfaceName, const char* targetIP, const char* downloadLink, const char* newDownloadLink, int queueNum);
-
-        int Run(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*));
-
-        int RunTest();
+        int Run();
 
 
         private:
@@ -59,7 +57,6 @@ namespace CHaks
             const char* chain2Name{"pre_routing"};
             uint32_t queueNum;
             uint32_t portId;
-            mnl_socket *nl;
 
             nfq_handle* handler;
             nfq_q_handle* queue;

