@@ -77,7 +77,9 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
 
     if(ipVersion == AF_INET)
     {
-        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
+        // NOTE: is the final argument (rep_size) correct? When trying to use the httpResponse string length it will
+        // give a segmentation fault..
+        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, sizeof(httpResponse)) < 0)
         {
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
             return APPLICATION_ERROR;
@@ -348,6 +350,19 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         std::cout << "filtering response...\n";
         if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
         {
+            char printBuf[1024]{};
+
+            std::cout << printBuf << "\n-----------" << std::endl;
+            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+            std::cout << "ip before mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            memset(printBuf, 0, 1024);
+
+            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+            std::cout << "tcp before mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
             if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 4 * tcpHeader->th_off, tcpPayloadLen) == APPLICATION_ERROR)
             {
                 pktb_free(pkBuff);
@@ -357,7 +372,17 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 return MNL_CB_ERROR;
             }
 
-            std::cout << "response mangled\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+            std::cout << "ip after mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            memset(printBuf, 0, 1024);
+
+            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+            std::cout << "tcp after mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
             reqFiltered = FALSE;
             reqAckNum = 0;
         }
