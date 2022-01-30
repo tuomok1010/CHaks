@@ -213,7 +213,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         if(ipv4Header == nullptr)
         {
             pktb_free(pkBuff);
-            LOG_ERROR(APPLICATION_ERROR, "pktb_network_header() error");
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
             return MNL_CB_ERROR;
         }
 
@@ -364,47 +364,69 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
     else // filter for the correct response. the seq num must match the request ack num
     {
         std::cout << "filtering response...\n";
-        if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
+        if(tcpPayloadLen > 0) // need to check because for some reason even if tcpPayloadLen is 0, the packet goes through the filter. Bug in FilterTCPRes()?
         {
-            std::cout << "matching response filtered, id: " << ntohl(ph->packet_id) << "\n";
-
-            char printBuf[1024]{};
-
-            std::cout << printBuf << "\n-----------" << std::endl;
-            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
-            std::cout << "ip before mangling:\n";
-            std::cout << printBuf << "\n-----------" << std::endl;
-
-            memset(printBuf, 0, 1024);
-
-            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
-            std::cout << "tcp before mangling:\n";
-            std::cout << printBuf << "\n-----------" << std::endl;
-
-            std::cout << "tcp payload len was " << tcpPayloadLen << std::endl;
-
-            if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 4 * tcpHeader->th_off, tcpPayloadLen) == APPLICATION_ERROR)
+            if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
             {
-                pktb_free(pkBuff);
+                std::cout << "matching response filtered, id: " << ntohl(ph->packet_id) << "\n";
+
+                char printBuf[1024]{};
+
+                std::cout << printBuf << "\n-----------" << std::endl;
+                nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+                std::cout << "ip before mangling:\n";
+                std::cout << printBuf << "\n-----------" << std::endl;
+
+                memset(printBuf, 0, 1024);
+
+                nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+                std::cout << "tcp before mangling:\n";
+                std::cout << printBuf << "\n-----------" << std::endl;
+
+                std::cout << "tcp payload len before mangling" << tcpPayloadLen << std::endl;
+
+                if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 0, tcpPayloadLen) == APPLICATION_ERROR)
+                {
+                    pktb_free(pkBuff);
+                    reqFiltered = FALSE;
+                    reqAckNum = 0;
+                    LOG_ERROR(APPLICATION_ERROR, "ManglePacket() error");
+                    return MNL_CB_ERROR;
+                }
+
+                ipv4Header = nfq_ip_get_hdr(pkBuff);
+                if(ipv4Header == nullptr)
+                {
+                    pktb_free(pkBuff);
+                    LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
+                    return MNL_CB_ERROR;
+                }
+                tcpHeader = nfq_tcp_get_hdr(pkBuff);
+                if(tcpHeader == nullptr)
+                {
+                    pktb_free(pkBuff);
+                    LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
+                    return MNL_CB_ERROR;
+                }
+
+                tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
+                std::cout << "tcp payload len after mangling" << tcpPayloadLen << std::endl;
+
+
+                std::cout << printBuf << "\n-----------" << std::endl;
+                nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+                std::cout << "ip after mangling:\n";
+                std::cout << printBuf << "\n-----------" << std::endl;
+
+                memset(printBuf, 0, 1024);
+
+                nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+                std::cout << "tcp after mangling:\n";
+                std::cout << printBuf << "\n-----------" << std::endl;
+
                 reqFiltered = FALSE;
                 reqAckNum = 0;
-                LOG_ERROR(APPLICATION_ERROR, "ManglePacket() error");
-                return MNL_CB_ERROR;
             }
-
-            std::cout << printBuf << "\n-----------" << std::endl;
-            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
-            std::cout << "ip after mangling:\n";
-            std::cout << printBuf << "\n-----------" << std::endl;
-
-            memset(printBuf, 0, 1024);
-
-            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
-            std::cout << "tcp after mangling:\n";
-            std::cout << printBuf << "\n-----------" << std::endl;
-
-            reqFiltered = FALSE;
-            reqAckNum = 0;
         }
     }
 
@@ -440,6 +462,7 @@ CHaks::FileInterceptor::~FileInterceptor()
     snprintf(cmd, CMD_LEN, "nft delete table %s %s",  ipVersion == AF_INET ? "ip" : "ip6", tableName);
     system(cmd);
 
+
     if(queue != nullptr)
         nfq_destroy_queue(queue);
 
@@ -461,23 +484,27 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
 
     char cmd[CMD_LEN]{};
 
+    // add table for prerouting chain
     snprintf(cmd, CMD_LEN, "nft add table %s %s", ipVersion == AF_INET ? "ip" : "ip6", tableName);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to create nft table");
         return APPLICATION_ERROR;
     }
+
     memset(cmd, 0, CMD_LEN);
 
-    // Add chain 1(postrouting) and rules to it
-    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook postrouting priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
+    // Add chain (pre_routing) and rules to it
+    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook prerouting priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
     if(system(cmd) != 0)
     {
         LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
         return APPLICATION_ERROR;
     }
+
     memset(cmd, 0, CMD_LEN);
 
+    // add pre routing rules
     snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain1Name);
     if(system(cmd) != 0)
     {
@@ -493,33 +520,6 @@ int CHaks::FileInterceptor::Init(const uint32_t ipVersion, const char* interface
         return APPLICATION_ERROR;
     }
     //////////////////////////////////////
-
-/*
-    // Add chain 2(prerouting) and rules to it
-    snprintf(cmd, CMD_LEN, "nft \'add chain %s %s %s { type filter hook output priority 0 ; }\'", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name);
-    if(system(cmd) != 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add chain1");
-        return APPLICATION_ERROR;
-    }
-    memset(cmd, 0, CMD_LEN);
-
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s meta l4proto tcp", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name);
-    if(system(cmd) != 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add meta rules in chain");
-        return APPLICATION_ERROR;
-    }
-    memset(cmd, 0, CMD_LEN);
-
-    snprintf(cmd, CMD_LEN, "nft add rule %s %s %s queue num %d", ipVersion == AF_INET ? "ip" : "ip6", tableName, chain2Name, queueNum);
-    if(system(cmd) != 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "system() error! failed to add queue rule in chain");
-        return APPLICATION_ERROR;
-    }
-    //////////////////////////////////////
-*/
 
     std::cout << "chains created:\n";
     system("nft list ruleset");

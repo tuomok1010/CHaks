@@ -53,8 +53,7 @@ namespace CHaks
             NetFilterCallbackData callbackData;
 
             const char* tableName{"filter"};
-            const char* chain1Name{"post_routing"};
-            const char* chain2Name{"pre_routing"};
+            const char* chain1Name{"pre_routing"};
             uint32_t queueNum;
             uint32_t portId;
 
