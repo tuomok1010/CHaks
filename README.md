@@ -19,7 +19,7 @@ A more thorough documentation coming once the programs are more stable and/or wh
 
 
 ## FileInterceptor
-NOTE: Not tested with ipv6!!!
+NOTE: Not tested with ipv6!!! Only works with HTTP
 
 Before you use the program, do the following steps:
 
