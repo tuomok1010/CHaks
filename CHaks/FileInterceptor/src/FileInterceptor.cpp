@@ -11,6 +11,15 @@
 #include <poll.h>
 #include <cstring>
 
+// IMPORTANT:
+/*
+    When mangling the packet, we are making it the same length as the original packet in order to avoid
+    having to mess around with seq/ack numbers. This is probably not the best thing to do? Also
+    this program has only been tested against a Manjaro virtual machine (arch linux x64) which used a Firefox browser. 
+    The attack worked, but the download page loaded for an unusually long time. The attack did NOT work on the 
+    default browser of the Manjaro machine. TODO: find out why and fix!!!
+*/
+
 static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* payload, uint32_t& reqAckNum)
 {
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
