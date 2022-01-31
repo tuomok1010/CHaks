@@ -19,6 +19,8 @@ A more thorough documentation coming once the programs are more stable and/or wh
 
 
 ## FileInterceptor
+NOTE: Not tested with ipv6!!!
+
 Before you use the program, do the following steps:
 
 <b>1. Create a nft table with the following command:</b>
