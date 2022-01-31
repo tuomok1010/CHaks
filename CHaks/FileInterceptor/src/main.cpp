@@ -13,17 +13,19 @@ void PrintHelp(char** argv)
 {
     std::cout
         << "To use the program, provide the arguments in the following format:\n"
-        << argv[0] << " <interface name> <ip version> <target ip> <download link> <new download link>\n\n"
+        << argv[0] << " <interface name> <ip version> <queueNum> <target ip> <download link> <new download link>\n\n"
         << "<interface name>: the interface you wish to use.\n"
         << "<ip version>: ip version of the target, must be 4 or 6\n"
+        << "<queueNum>: nft queue number used to capture packets\n"
         << "<target ip>: target whose file you wish to intercept\n"
         << "<download link>: file you wish to replace\n"
         << "<new download link>: the path to the file you want the target to download\n\n"
-        << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " download.example.co/testfile.exe" << "10.0.2.15/test_program.exe" << std::endl;
+        << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " 0 " << " download.example.co/testfile.exe " << "10.0.2.15/test_program.exe" << std::endl;
 }
 
 // TODO: improve args processing
-int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, char* targetIP, char* downloadLink, char* newDownloadLink)
+int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, uint32_t& queueNum, char* targetIP, 
+    char* downloadLink, char* newDownloadLink)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -31,7 +33,7 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
         exit(EXIT_SUCCESS);
     }
 
-    if(argc != 6)
+    if(argc != 7)
         return APPLICATION_ERROR;
 
     if(PacketCraft::GetStrLen(argv[1]) > IFNAMSIZ)
@@ -46,9 +48,11 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
     else
         return APPLICATION_ERROR;
 
-    PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[3]);
-    PacketCraft::CopyStr(downloadLink, DOWNLOAD_LINK_STR_SIZE, argv[4]);
-    PacketCraft::CopyStr(newDownloadLink, DOWNLOAD_LINK_STR_SIZE, argv[5]);
+    queueNum = atoi(argv[3]);
+
+    PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[4]);
+    PacketCraft::CopyStr(downloadLink, DOWNLOAD_LINK_STR_SIZE, argv[5]);
+    PacketCraft::CopyStr(newDownloadLink, DOWNLOAD_LINK_STR_SIZE, argv[6]);
 
     return NO_ERROR;
 }
@@ -57,12 +61,12 @@ int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
     uint32_t ipVersion{};
+    uint32_t queueNum{};
     char targetIPStr[INET6_ADDRSTRLEN]{};
     char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
     char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
-    uint32_t queueNum{0};
 
-    if(ProcessArgs(argc, argv, interfaceName, ipVersion, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, interfaceName, ipVersion, queueNum, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
