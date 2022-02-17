@@ -20,7 +20,7 @@
     default browser of the Manjaro machine. TODO: find out why and fix!!!
 */
 
-static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* payload, uint32_t& reqAckNum)
+static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* payload, uint32_t& initialAckNum)
 {
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
     if(res == PC_HTTP_REQUEST)
@@ -56,7 +56,7 @@ static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* pa
 
             if(PacketCraft::CompareStr(packetDownloadLink, downloadLink) == TRUE)
             {
-                reqAckNum = tcpHeader->ack_seq;
+                initialAckNum = tcpHeader->ack_seq;
                 return TRUE;
             }
         }
@@ -78,6 +78,7 @@ static bool32 FilterTCPRes(tcphdr* tcpHeader, char* payload, uint32_t requestAck
     }
     return FALSE;
 }
+
 
 static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buff* pkBuff, uint32_t matchOffset, uint32_t matchLen)
 {
@@ -114,7 +115,7 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
     return NO_ERROR;
 }
 
- static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl, pkt_buff* pkBuff)
+ static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl, pkt_buff* pkBuff, int verdict = NF_ACCEPT)
  {
     char buf[MNL_SOCKET_BUFFER_SIZE];
     nlmsghdr* nlh;
@@ -128,7 +129,7 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
         nfq_nlmsg_verdict_put_pkt(nlh, pktb_data(pkBuff), pktb_len(pkBuff));
     }
 
-    nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
+    nfq_nlmsg_verdict_put(nlh, id, verdict);
 
     /* example to set the connmark. First, start NFQA_CT section: */
     nest = mnl_attr_nest_start(nlh, NFQA_CT);
@@ -149,11 +150,234 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
     return NO_ERROR;
  }
 
-bool32 reqFiltered{FALSE};
-uint32_t reqAckNum{0};
+uint32_t initialAckNum{0}; // network byte order
+bool32 processRequest{TRUE};
+bool32 processResponse{FALSE};
+char serverAddr[INET6_ADDRSTRLEN]{};
+
+ // returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed
+ int ProcessRequest(nfqnl_msg_packet_hdr* ph, pkt_buff* pkBuff, uint32_t ipVersion, CHaks::NetFilterCallbackData& callbackData)
+ {
+    iphdr* ipv4Header{nullptr};
+    ip6_hdr* ipv6Header{nullptr};
+    tcphdr* tcpHeader{nullptr};
+
+    // Filter for a matching IP
+    if(ipVersion == AF_INET)
+    {
+        ipv4Header = nfq_ip_get_hdr(pkBuff);
+        if(ipv4Header == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
+            return -1;
+        }
+
+        sockaddr_in targetAddr{};
+        inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
+        if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
+            return 1;
+
+        if(nfq_ip_set_transport_header(pkBuff, ipv4Header) < 0)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_set_transport_header() error");
+            return -1;
+        }
+
+        if(ipv4Header->protocol != IPPROTO_TCP)
+            return 1;
+    }
+    else if(ipVersion == AF_INET6)
+    {
+        ipv6Header = nfq_ip6_get_hdr(pkBuff);
+        if(ipv6Header == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_get_hdr()");
+            return -1;
+        }
+
+        sockaddr_in6 targetAddr{};
+        inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
+        if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
+            return 1;
+
+        int res = nfq_ip6_set_transport_header(pkBuff, ipv6Header, IPPROTO_TCP);
+        if(res != 1)
+            return 1;
+    }
+    //////////
+
+    tcpHeader = nfq_tcp_get_hdr(pkBuff);
+    if(tcpHeader == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
+        return -1;
+    }
+
+    void *tcpPayload = nfq_tcp_get_payload(tcpHeader, pkBuff);
+    if(tcpPayload == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_payload() error");
+        return -1;
+    }
+
+    // unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
+    if(FilterTCPReq(callbackData.downloadLink, tcpHeader, (char*)tcpPayload, initialAckNum) == TRUE)
+    {
+        if(ipVersion == AF_INET)
+        {
+            if(inet_ntop(AF_INET, &ipv4Header->daddr, serverAddr, INET6_ADDRSTRLEN) == nullptr)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
+                return -1;
+            }
+        }
+        else
+        {
+            if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, serverAddr, INET6_ADDRSTRLEN) == nullptr)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
+                return -1;
+            }
+        }
+
+        return 0;
+    }
+
+    return 1;
+ }
+
+  // returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed
+ int ProcessResponse(nfqnl_msg_packet_hdr* ph, pkt_buff* pkBuff, uint32_t ipVersion, CHaks::NetFilterCallbackData& callbackData)
+ {
+    iphdr* ipv4Header{nullptr};
+    ip6_hdr* ipv6Header{nullptr};
+    tcphdr* tcpHeader{nullptr};
+
+    // Filter for a matching IP
+    if(ipVersion == AF_INET)
+    {
+        ipv4Header = nfq_ip_get_hdr(pkBuff);
+        if(ipv4Header == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
+            return -1;
+        }
+
+        sockaddr_in targetAddr{};
+        inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
+        if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
+            return 1;
+
+        if(nfq_ip_set_transport_header(pkBuff, ipv4Header) < 0)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_set_transport_header() error");
+            return -1;
+        }
+
+        if(ipv4Header->protocol != IPPROTO_TCP)
+            return 1;
+    }
+    else if(ipVersion == AF_INET6)
+    {
+        ipv6Header = nfq_ip6_get_hdr(pkBuff);
+        if(ipv6Header == nullptr)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_get_hdr()");
+            return -1;
+        }
+
+        sockaddr_in6 targetAddr{};
+        inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
+        if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
+            return 1;
+
+        int res = nfq_ip6_set_transport_header(pkBuff, ipv6Header, IPPROTO_TCP);
+        if(res != 1)
+            return 1;
+    }
+    //////////
+
+    tcpHeader = nfq_tcp_get_hdr(pkBuff);
+    if(tcpHeader == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
+        return -1;
+    }
+
+    void *tcpPayload = nfq_tcp_get_payload(tcpHeader, pkBuff);
+    if(tcpPayload == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_payload() error");
+        return -1;
+    }
+
+    unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
+    // need to check because for some reason even if tcpPayloadLen is 0, the packet goes through the filter. Bug in FilterTCPRes()?
+    if(tcpPayloadLen > 0)
+    {
+        if(FilterTCPRes(tcpHeader, (char*)tcpPayload, initialAckNum) == TRUE)
+        {
+            std::cout << "matching response filtered, id: " << ntohl(ph->packet_id) << "\n";
+
+            char printBuf[1024]{};
+
+            std::cout << printBuf << "\n-----------" << std::endl;
+            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+            std::cout << "ip before mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            memset(printBuf, 0, 1024);
+
+            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+            std::cout << "tcp before mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            std::cout << "tcp payload len before mangling" << tcpPayloadLen << std::endl;
+
+            if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 0, tcpPayloadLen) == APPLICATION_ERROR)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "ManglePacket() error");
+                return -1;
+            }
+
+            ipv4Header = nfq_ip_get_hdr(pkBuff);
+            if(ipv4Header == nullptr)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
+                return -1;
+            }
+            tcpHeader = nfq_tcp_get_hdr(pkBuff);
+            if(tcpHeader == nullptr)
+            {
+                LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
+                return -1;
+            }
+
+            tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
+            std::cout << "tcp payload len after mangling" << tcpPayloadLen << std::endl;
+
+
+            std::cout << printBuf << "\n-----------" << std::endl;
+            nfq_ip_snprintf(printBuf, 1024, ipv4Header);
+            std::cout << "ip after mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            memset(printBuf, 0, 1024);
+
+            nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
+            std::cout << "tcp after mangling:\n";
+            std::cout << printBuf << "\n-----------" << std::endl;
+
+            return 0;
+        }
+    }
+
+    return 1;
+ }
+
+
 static int queueCallback(const nlmsghdr *nlh, void *data)
 {
-    std::cout << "--------------------\n";
     nfqnl_msg_packet_hdr* ph{nullptr};
     nlattr* attr[NFQA_MAX + 1]{};
     nfgenmsg*nfg{nullptr};
@@ -197,8 +421,6 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
-    printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
-
     uint32_t ipVersion{};
     if(ntohs(ph->hw_protocol) == ETH_P_IP)
         ipVersion = AF_INET;
@@ -212,230 +434,40 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
-    iphdr* ipv4Header{nullptr};
-    ip6_hdr* ipv6Header{nullptr};
-    tcphdr* tcpHeader{nullptr};
-
-    if(ipVersion == AF_INET)
+    if(processRequest == TRUE)
     {
-        ipv4Header = nfq_ip_get_hdr(pkBuff);
-        if(ipv4Header == nullptr)
+        int res = ProcessRequest(ph, pkBuff, ipVersion, callbackData);
+        if(res == 0)
+        {
+            std::cout << "--------------------\n";
+            printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+            processRequest = FALSE;
+            processResponse = TRUE;
+            std::cout << "request processed succesfully\n";
+        }
+        else if(res == -1)
         {
             pktb_free(pkBuff);
-            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
+            LOG_ERROR(APPLICATION_ERROR, "ProcessRequest() error");
             return MNL_CB_ERROR;
         }
-
-        if(nfq_ip_set_transport_header(pkBuff, ipv4Header) < 0)
+    }
+    else if(processResponse == TRUE)
+    {
+        int res = ProcessResponse(ph, pkBuff, ipVersion, callbackData);
+        if(res == 0)
+        {
+            std::cout << "--------------------\n";
+            printf("packet received (id=%u hw=0x%04x hook=%u, payload len %u\n", ntohl(ph->packet_id), ntohs(ph->hw_protocol), ph->hook, plen);
+            processRequest = FALSE;
+            processResponse = FALSE;
+            std::cout << "response processed succesfully\n";
+        }
+        else if(res == -1)
         {
             pktb_free(pkBuff);
-            LOG_ERROR(APPLICATION_ERROR, "nfq_ip_set_transport_header() error");
+            LOG_ERROR(APPLICATION_ERROR, "ProcessResponse() error");
             return MNL_CB_ERROR;
-        }
-
-        if(ipv4Header->protocol == IPPROTO_TCP)
-        {
-            // make sure that the packet IPs matches with the desired target IP
-            if(reqFiltered == FALSE)
-            {
-                sockaddr_in targetAddr{};
-                inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
-                if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
-                {
-                    std::cout << "ip did not match\n";
-                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-                    {
-                        pktb_free(pkBuff);
-                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                        return MNL_CB_ERROR;
-                    }
-                    return MNL_CB_OK;
-                }
-            }
-            else
-            {
-                sockaddr_in targetAddr{};
-                inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
-                if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
-                {
-                    std::cout << "ip did not match\n";
-                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-                    {
-                        pktb_free(pkBuff);
-                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                        return MNL_CB_ERROR;
-                    }
-                    return MNL_CB_OK;
-                }
-            }
-            //////////////////////////
-        }
-        else // no TCP layer in packet
-        {
-            std::cout << "no tcp header in packet\n";
-            if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-            {
-                pktb_free(pkBuff);
-                LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                return MNL_CB_ERROR;
-            }
-            return MNL_CB_OK;
-        }
-    }
-    else if(ipVersion == AF_INET6)
-    {
-        ipv6Header = nfq_ip6_get_hdr(pkBuff);
-        if(ipv6Header == nullptr)
-        {
-            pktb_free(pkBuff);
-            LOG_ERROR(APPLICATION_ERROR, "nfq_ip6_get_hdr()");
-            return MNL_CB_ERROR;
-        }
-
-        int res = nfq_ip6_set_transport_header(pkBuff, ipv6Header, IPPROTO_TCP);
-        if(res == 1)
-        {
-            // make sure that the packet IPs matches with the desired target IP
-            if(reqFiltered == FALSE)
-            {
-                sockaddr_in6 targetAddr{};
-                inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
-                if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-                {
-                    std::cout << "ip6 did not match\n";
-                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-                    {
-                        pktb_free(pkBuff);
-                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                        return MNL_CB_ERROR;
-                    }
-                    return MNL_CB_OK;
-                }
-            }
-            else
-            {
-                sockaddr_in6 targetAddr{};
-                inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);  
-                if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-                {
-                    std::cout << "ip6 did not match\n";
-                    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-                    {
-                        pktb_free(pkBuff);
-                        LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                        return MNL_CB_ERROR;
-                    }
-                    return MNL_CB_OK;
-                }
-            }
-            //////////
-        }
-        else if(res < 0) // no TCP layer in packet
-        {
-            std::cout << "no tcp header found in packet\n";
-            if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
-            {
-                pktb_free(pkBuff);
-                LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
-                return MNL_CB_ERROR;
-            }
-            return MNL_CB_OK;
-        }
-    }
-
-    tcpHeader = nfq_tcp_get_hdr(pkBuff);
-    if(tcpHeader == nullptr)
-    {
-        pktb_free(pkBuff);
-        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
-        return MNL_CB_ERROR;
-    }
-
-    void *tcpPayload = nfq_tcp_get_payload(tcpHeader, pkBuff);
-    if(tcpPayload == nullptr)
-    {
-        pktb_free(pkBuff);
-        LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_payload() error");
-        return MNL_CB_ERROR;
-    }
-
-    unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
-    
-    if(reqFiltered == FALSE) // filter for the correct request and get its ack number
-    {
-        std::cout << "filtering request...\n";
-        if(FilterTCPReq(callbackData.downloadLink, tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
-        {
-            std::cout << "matching request filtered, id: " << ntohl(ph->packet_id) << "\n";
-            reqFiltered = TRUE;
-        }
-    }
-    else // filter for the correct response. the seq num must match the request ack num
-    {
-        std::cout << "filtering response...\n";
-        if(tcpPayloadLen > 0) // need to check because for some reason even if tcpPayloadLen is 0, the packet goes through the filter. Bug in FilterTCPRes()?
-        {
-            if(FilterTCPRes(tcpHeader, (char*)tcpPayload, reqAckNum) == TRUE)
-            {
-                std::cout << "matching response filtered, id: " << ntohl(ph->packet_id) << "\n";
-
-                char printBuf[1024]{};
-
-                std::cout << printBuf << "\n-----------" << std::endl;
-                nfq_ip_snprintf(printBuf, 1024, ipv4Header);
-                std::cout << "ip before mangling:\n";
-                std::cout << printBuf << "\n-----------" << std::endl;
-
-                memset(printBuf, 0, 1024);
-
-                nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
-                std::cout << "tcp before mangling:\n";
-                std::cout << printBuf << "\n-----------" << std::endl;
-
-                std::cout << "tcp payload len before mangling" << tcpPayloadLen << std::endl;
-
-                if(ManglePacket(ipVersion, callbackData.newDownloadLink, pkBuff, 0, tcpPayloadLen) == APPLICATION_ERROR)
-                {
-                    pktb_free(pkBuff);
-                    reqFiltered = FALSE;
-                    reqAckNum = 0;
-                    LOG_ERROR(APPLICATION_ERROR, "ManglePacket() error");
-                    return MNL_CB_ERROR;
-                }
-
-                ipv4Header = nfq_ip_get_hdr(pkBuff);
-                if(ipv4Header == nullptr)
-                {
-                    pktb_free(pkBuff);
-                    LOG_ERROR(APPLICATION_ERROR, "nfq_ip_get_hdr() error");
-                    return MNL_CB_ERROR;
-                }
-                tcpHeader = nfq_tcp_get_hdr(pkBuff);
-                if(tcpHeader == nullptr)
-                {
-                    pktb_free(pkBuff);
-                    LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_get_hdr");
-                    return MNL_CB_ERROR;
-                }
-
-                tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
-                std::cout << "tcp payload len after mangling" << tcpPayloadLen << std::endl;
-
-
-                std::cout << printBuf << "\n-----------" << std::endl;
-                nfq_ip_snprintf(printBuf, 1024, ipv4Header);
-                std::cout << "ip after mangling:\n";
-                std::cout << printBuf << "\n-----------" << std::endl;
-
-                memset(printBuf, 0, 1024);
-
-                nfq_tcp_snprintf(printBuf, 1024, tcpHeader);
-                std::cout << "tcp after mangling:\n";
-                std::cout << printBuf << "\n-----------" << std::endl;
-
-                reqFiltered = FALSE;
-                reqAckNum = 0;
-            }
         }
     }
 

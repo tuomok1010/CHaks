@@ -1,6 +1,7 @@
 #ifndef PC_FILE_INTERCEPTOR_H
 #define PC_FILE_INTERCEPTOR_H
 
+// #include "../../../PacketCraft/src/include/PCInclude.h"
 #include "/home/kali/Projects/CHaks/CHaks/PacketCraft/src/include/PCInclude.h"
 
 extern "C"
@@ -21,11 +22,11 @@ namespace CHaks
     struct NetFilterCallbackData
     {
         mnl_socket *nl;
-        uint32_t ipVersion;
-        char targetIPStr[INET6_ADDRSTRLEN]{};
-        char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};
-        char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};
-        char interfaceName[IFNAMSIZ]{};
+        uint32_t ipVersion;                                 // provided by the user in program args
+        char targetIPStr[INET6_ADDRSTRLEN]{};               // provided by the user in program args
+        char downloadLink[DOWNLOAD_LINK_STR_SIZE]{};        // provided by the user in program args
+        char newDownloadLink[DOWNLOAD_LINK_STR_SIZE]{};     // provided by the user in program args
+        char interfaceName[IFNAMSIZ]{};                     // provided by the user in program args
     };
 
     class FileInterceptor
@@ -40,8 +41,6 @@ namespace CHaks
 
         private:
             uint32_t ipVersion;
-
-            EthHeader requestEthHeader;
 
             NetFilterCallbackData callbackData;
 

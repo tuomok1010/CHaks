@@ -88,8 +88,8 @@ uint32_t PacketCraft::GetHTTPMethod(uint8_t* payloadData)
     char buffer[255]{};
     CopyStrUntil(buffer, sizeof(buffer), (char*)payloadData, '\n');
 
-    std::cout << "in GetHTTPMethod. Buffer: " << "\n";
-    std::cout << buffer << std::endl;
+    // std::cout << "in GetHTTPMethod. Buffer: " << "\n";
+    // std::cout << buffer << std::endl;
 
     // check request methods
     if(FindInStr(buffer, "GET ") == 0)
