@@ -114,7 +114,6 @@ static int ManglePacket(uint32_t ipVersion, const char* newDownloadLink, pkt_buf
 
     if(pktb_mangled(pkBuff))
     {
-        std::cout << "packet was mangled" << std::endl;
         nfq_nlmsg_verdict_put_pkt(nlh, pktb_data(pkBuff), pktb_len(pkBuff));
     }
 

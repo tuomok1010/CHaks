@@ -15,17 +15,20 @@ extern "C"
 #include <linux/netfilter/nfnetlink_conntrack.h>
 }
 
-#define DOWNLOAD_LINK_STR_SIZE  512
+#define PATH_MAX_SIZE  512
 
 namespace CHaks
 {
     struct NetFilterCallbackData
     {
         mnl_socket *nl;
-        uint32_t ipVersion;                                 // provided by the user in program args
-        char targetIPStr[INET6_ADDRSTRLEN]{};               // provided by the user in program args
-        char serverIPStr[INET6_ADDRSTRLEN]{};               // received in the netfilter callback
-        char interfaceName[IFNAMSIZ]{};                     // provided by the user in program args
+        uint32_t ipVersion;             // provided by the user in program args
+        const char* targetIPStr{};      // provided by the user in program args
+        char* serverIPStr{};            // received in the netfilter callback
+        const char* interfaceName{};    // provided by the user in program args
+        const char* url{};              // provided by the user in program args
+        const char* code{};             // read from a file in main()
+        int codeLen{};
     };
 
     class CodeInjector
@@ -34,13 +37,12 @@ namespace CHaks
         CodeInjector();
         ~CodeInjector();
 
-        int Init(const uint32_t ipVersion, const char* interfaceName, const char* targetIP, int queueNum);
+        int Init(const uint32_t ipVersion, const char* interfaceName, const char* targetIP, int queueNum, const char* url,
+            const char* injectCode, int injectCodeLen);
         int Run();
 
 
         private:
-            uint32_t ipVersion;
-
             NetFilterCallbackData callbackData;
 
             uint32_t queueNum;
