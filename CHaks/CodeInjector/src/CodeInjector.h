@@ -22,12 +22,12 @@ namespace CHaks
     struct NetFilterCallbackData
     {
         mnl_socket *nl;
-        uint32_t ipVersion;             // provided by the user in program args
-        const char* targetIPStr{};      // provided by the user in program args
-        char* serverIPStr{};            // received in the netfilter callback
-        const char* interfaceName{};    // provided by the user in program args
-        const char* url{};              // provided by the user in program args
-        const char* code{};             // read from a file in main()
+        uint32_t ipVersion;                     // provided by the user in program args
+        const char* targetIPStr{};              // provided by the user in program args
+        char serverIPStr[INET6_ADDRSTRLEN]{};   // received in the netfilter callback
+        const char* interfaceName{};            // provided by the user in program args
+        const char* url{};                      // provided by the user in program args
+        const char* code{};                     // read from a file in main()
         int codeLen{};
     };
 

