@@ -91,7 +91,7 @@ int main(int argc, char** argv)
     file.seekg (0, file.beg);
 
     const char* codePrefix = "<script>";
-    const char* codeSuffix = "</script";
+    const char* codeSuffix = "</script>";
 
     int totalCodeLen = jsLength + PacketCraft::GetStrLen(codePrefix) + PacketCraft::GetStrLen(codeSuffix);
 

