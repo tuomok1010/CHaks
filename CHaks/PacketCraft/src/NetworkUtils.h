@@ -22,7 +22,21 @@ namespace PacketCraft
         {PC_HTTP_REQUEST, "HTTP_REQUEST"},
         {PC_HTTP_RESPONSE, "HTTP_RESPONSE"},
         {PC_DNS_REQUEST, "DNS_REQUEST"},
-        {PC_DNS_RESPONSE, "DNS_RESPONSE"}
+        {PC_DNS_RESPONSE, "DNS_RESPONSE"},
+        {PC_HTTP_GET, "HTTP_GET"},
+        {PC_HTTP_HEAD, "HTTP_HEAD"},
+        {PC_HTTP_POST, "HTTP_POST"},
+        {PC_HTTP_PUT, "HTTP_PUT"},
+        {PC_HTTP_DELETE, "HTTP_DELETE"},
+        {PC_HTTP_CONNECT, "HTTP_CONNECT"},
+        {PC_HTTP_OPTIONS, "HTTP_OPTIONS"},
+        {PC_HTTP_TRACE, "HTTP_TRACE"},
+        {PC_HTTP_PATCH, "HTTP_PATCH"},
+        {PC_HTTP_INFO, "HTTP_INFO"},
+        {PC_HTTP_SUCCESS, "HTTP_SUCCESS"},
+        {PC_HTTP_REDIR, "HTTP_REDIR"},
+        {PC_HTTP_CLIENT_ERR, "HTTP_CLIENT_ERROR"},
+        {PC_HTTP_SERVER_ERR, "HTTP_SERVER_ERROR"}
     };
 
     const char* ProtoUint32ToStr(uint32_t protocol);

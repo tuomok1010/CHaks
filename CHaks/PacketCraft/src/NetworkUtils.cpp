@@ -83,6 +83,10 @@ uint32_t PacketCraft::GetUDPDataProtocol(UDPHeader* udpHeader)
     return PC_NONE;
 }
 
+/*
+    buggy because HTTP headers can also come after a previous html document in the same packet (currently this
+    assumes that the header is always at the start of the payload)
+*/
 uint32_t PacketCraft::GetHTTPMethod(uint8_t* payloadData)
 {
     char buffer[255]{};
@@ -111,7 +115,7 @@ uint32_t PacketCraft::GetHTTPMethod(uint8_t* payloadData)
     else if(FindInStr(buffer, "PATCH ") == 0)
         return PC_HTTP_PATCH;
 
-    // check response status codes, TODO: improve
+    // check response status codes, TODO: improve, maybe use regex?
     if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 1") != -1)
         return PC_HTTP_INFO;
     if(FindInStr(buffer, "HTTP") == 0 && FindInStr(buffer, " 2") != -1)

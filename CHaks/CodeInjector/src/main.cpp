@@ -74,8 +74,6 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    std::cout << "opening file...\n";
-
     std::ifstream file;
     file.open(pathToContent, std::ifstream::binary);
     if(!file.is_open())
@@ -83,8 +81,6 @@ int main(int argc, char** argv)
         LOG_ERROR(APPLICATION_ERROR, "failed to open js file");
         return APPLICATION_ERROR;
     }
-
-    std::cout << "file opened\n";
 
     file.seekg (0, file.end);
     int jsLength = file.tellg();
@@ -103,7 +99,6 @@ int main(int argc, char** argv)
     file.close();
 
     CHaks::CodeInjector codeInjector;
-    std::cout << "initializing\n";
     if(codeInjector.Init(ipVersion, interfaceName, targetIPStr, queueNum, url, codeBuffer, totalCodeLen) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Init() error");
@@ -111,7 +106,7 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-    std::cout << "running...\n";
+    std::cout << "running... press enter to stop\n";
     if(codeInjector.Run() == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "CHaks::FileInterceptor::Run() error");

