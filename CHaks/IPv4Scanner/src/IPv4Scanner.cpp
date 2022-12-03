@@ -18,6 +18,67 @@ CHaks::IPv4Scanner::~IPv4Scanner()
     
 }
 
+int CHaks::IPv4Scanner::CreateARPRequest(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP, 
+    PacketCraft::Packet& packet)
+{
+    packet.ResetPacketBuffer();
+
+    packet.AddLayer(PC_ETHER_II, ETH_HLEN);
+    EthHeader* ethHeader = (EthHeader*)packet.GetLayerStart(0);
+    memcpy(ethHeader->ether_shost, srcMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(ethHeader->ether_dhost, dstMAC.ether_addr_octet, ETH_ALEN);
+    ethHeader->ether_type = htons(ETH_P_ARP);
+
+    packet.AddLayer(PC_ARP, sizeof(ARPHeader));
+    ARPHeader* arpHeader = (ARPHeader*)packet.GetLayerStart(1);
+    arpHeader->ar_hrd = htons(ARPHRD_ETHER);
+    arpHeader->ar_pro = htons(ETH_P_IP);
+    arpHeader->ar_hln = ETH_ALEN;
+    arpHeader->ar_pln = IPV4_ALEN;
+    arpHeader->ar_op = htons(ARPOP_REQUEST);
+    memcpy(arpHeader->ar_sha, srcMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(arpHeader->ar_sip, &srcIP.sin_addr.s_addr, IPV4_ALEN);
+    memcpy(arpHeader->ar_tha, dstMAC.ether_addr_octet, ETH_ALEN);
+    memcpy(arpHeader->ar_tip, &dstIP.sin_addr.s_addr, IPV4_ALEN);
+
+    return NO_ERROR;
+}
+
+int CHaks::IPv4Scanner::CreateARPRequest(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr,
+    PacketCraft::Packet& packet)
+{
+    ether_addr srcMAC{};
+    ether_addr dstMAC{};
+    sockaddr_in srcIP{};
+    sockaddr_in dstIP{};
+
+    if(ether_aton_r(srcMACStr, &srcMAC) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(ether_aton_r(dstMACStr, &dstMAC) == nullptr)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "ether_aton_r() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_pton(AF_INET, srcIPStr, &srcIP.sin_addr) <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        return APPLICATION_ERROR;
+    }
+
+    if(inet_pton(AF_INET, dstIPStr, &dstIP.sin_addr) <= 0)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "inet_pton() error!");
+        return APPLICATION_ERROR;
+    }
+
+    return CreateARPRequest(srcMAC, dstMAC, srcIP, dstIP, packet);
+}
+
 int CHaks::IPv4Scanner::SendARPPackets(const char* interfaceName, const int socketFd, const sockaddr_in& srcIP, const ether_addr& srcMAC,
     const sockaddr_in& networkAddr, const sockaddr_in& broadcastAddr, bool32& running)
 {
@@ -40,16 +101,16 @@ int CHaks::IPv4Scanner::SendARPPackets(const char* interfaceName, const int sock
         ether_addr targetMAC{};
         memset(targetMAC.ether_addr_octet, 0xff, ETH_ALEN);
 
-        PacketCraft::ARPPacket arpPacket{};
-        if(arpPacket.Create(srcMAC, targetMAC, srcIP, targetIP, ARPType::ARP_REQUEST) == APPLICATION_ERROR)
+        PacketCraft::Packet packet;
+        if(CreateARPRequest(srcMAC, targetMAC, srcIP, targetIP, packet) == APPLICATION_ERROR)
         {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Create() error!");
+            LOG_ERROR(APPLICATION_ERROR, "CreateARPRequest() error!");
             return APPLICATION_ERROR;
         }
 
-        if(arpPacket.Send(socketFd, interfaceName) == APPLICATION_ERROR)
+        if(packet.Send(socketFd, interfaceName, 0) == APPLICATION_ERROR)
         {
-            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::ARPPacket::Send() error!");
+            LOG_ERROR(APPLICATION_ERROR, "PacketCraft::Packet::Send() error!");
             return APPLICATION_ERROR;
         }
     }
@@ -99,15 +160,21 @@ int CHaks::IPv4Scanner::ReceiveARPPackets(const char* interfaceName, const int s
 
 int CHaks::IPv4Scanner::ProcessReceivedPacket(const char* interfaceName, const int socketFd, bool32 printHeader)
 {
-    PacketCraft::ARPPacket arpPacket{};
-    if(arpPacket.Receive(socketFd, 0) == NO_ERROR)
+    PacketCraft::Packet packet;
+    if(packet.Receive(socketFd, 0) == NO_ERROR)
     {
         sockaddr_in ipAddr{};
         ipAddr.sin_family = AF_INET;
-        memcpy(&ipAddr.sin_addr.s_addr, arpPacket.arpHeader->ar_sip, IPV4_ALEN);
+        ARPHeader* arpHeader = (ARPHeader*)packet.FindLayerByType(PC_ARP);
+        if(arpHeader == nullptr)
+            return NO_ERROR;
+        memcpy(&ipAddr.sin_addr.s_addr, arpHeader->ar_sip, IPV4_ALEN);
 
         ether_addr macAddr{};
-        memcpy(macAddr.ether_addr_octet, arpPacket.ethHeader->ether_shost, ETH_ALEN);
+        EthHeader* ethHeader = (EthHeader*)packet.FindLayerByType(PC_ETHER_II);
+        if(ethHeader == nullptr)
+            return NO_ERROR;
+        memcpy(macAddr.ether_addr_octet, ethHeader->ether_shost, ETH_ALEN);
 
         // only print the address if it doesn't already exist in the arp table. NOTE: we cleared the ARP table in SendARPPackets() to
         // prevent printing duplicates
@@ -119,7 +186,7 @@ int CHaks::IPv4Scanner::ProcessReceivedPacket(const char* interfaceName, const i
                 return APPLICATION_ERROR;
             }
 
-            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpPacket.arpHeader->ar_sha) == APPLICATION_ERROR)
+            if(PacketCraft::AddAddrToARPTable(socketFd, interfaceName, ipAddr, *(ether_addr*)arpHeader->ar_sha) == APPLICATION_ERROR)
             {
                 LOG_ERROR(APPLICATION_ERROR, "Failed to add MAC address into the ARP table\n");
                 return APPLICATION_ERROR;

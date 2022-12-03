@@ -19,6 +19,11 @@ namespace CHaks
         private:
         int ProcessReceivedPacket(const char* interfaceName, const int socketFd, bool32 printHeader);
         int PrintResult(const ether_addr& macAddr, const sockaddr_in& ipAddr, bool32 printHeader);
+
+        int CreateARPRequest(const ether_addr& srcMAC, const ether_addr& dstMAC, const sockaddr_in& srcIP, const sockaddr_in& dstIP,
+            PacketCraft::Packet& packet);
+        int CreateARPRequest(const char* srcMACStr, const char* dstMACStr, const char* srcIPStr, const char* dstIPStr,
+            PacketCraft::Packet& packet);
     };
 }
 
