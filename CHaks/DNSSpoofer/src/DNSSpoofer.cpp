@@ -63,6 +63,7 @@ int CHaks::DNSSpoofer::ProcessPackets(int socketFd, const char* interfaceName, c
     }
 
     DNSHeader* dnsHeader = (DNSHeader*)packet.FindLayerByType(PC_DNS_REQUEST);
+
     if(dnsHeader != nullptr && dnsHeader->qr == 0) // check that this is a dns query not a response
     {
         // check the ip version of the packet
@@ -80,6 +81,7 @@ int CHaks::DNSSpoofer::ProcessPackets(int socketFd, const char* interfaceName, c
                     LOG_ERROR(APPLICATION_ERROR, "DNSParser::Parse() error!");
                     return APPLICATION_ERROR;
                 }
+
 
                 for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
                 {

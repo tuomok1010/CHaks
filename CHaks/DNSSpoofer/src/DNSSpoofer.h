@@ -1,7 +1,7 @@
 #ifndef DNS_SPOOFER_H
 #define DNS_SPOOFER_H
 
-#include "../../../PacketCraft/src/include/PCInclude.h"
+#include "../../../../PacketCraft/PacketCraft/src/include/PCInclude.h"
 
 // IMPORTANT: we are relying on the fact that our custom response reaches the target before the response from the actual
 // dns server. Fix maybe?

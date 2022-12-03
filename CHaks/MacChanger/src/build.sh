@@ -1,8 +1,8 @@
 #!/bin/bash
 
 Code="../../src/main.cpp"
-LibPath="/home/kali/Projects/CHaks/CHaks/PacketCraft/build/lib/"
-IncludePath="/home/kali/Projects/CHaks/CHaks/PacketCraft/src/include/"
+LibPath="../../../../../PacketCraft/PacketCraft/build/lib/"
+IncludePath="../../../../../PacketCraft/PacketCraft/src/include/"
 export LD_LIBRARY_PATH=$LibPath:$LD_LIBRARY_PATH
 
 

@@ -1,7 +1,7 @@
 #ifndef IPV4_SCANNER_H
 #define IPV4_SCANNER_H
 
-#include "../../../PacketCraft/src/include/PCInclude.h"
+#include "../../../../PacketCraft/PacketCraft/src/include/PCInclude.h"
 
 namespace CHaks
 {
