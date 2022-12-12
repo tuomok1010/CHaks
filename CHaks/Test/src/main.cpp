@@ -2,14 +2,25 @@
 
 #include <iostream>
 
+bool FilterPacket(const PacketCraft::Packet& packet)
+{
+    return true;
+}
+
+int EditPacket(PacketCraft::Packet& packet)
+{
+    return NO_ERROR;
+}
   
 int main(int argc, char** argv)
 {
     int queueNum{1};
-    PacketCraft::PacketFilterQueue packetQueue(queueNum, AF_BRIDGE);
-    if(packetQueue.Init() == APPLICATION_ERROR)
+    int af{AF_INET};
+    PacketCraft::PacketFilterQueue packetQueue;
+
+    if(packetQueue.Init(queueNum, af, FilterPacket, EditPacket, PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT) == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "ERROR");
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::PacketFilterQueue::Init() error!");
         return APPLICATION_ERROR;
     }
     else
