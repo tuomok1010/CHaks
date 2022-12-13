@@ -1,7 +1,7 @@
 #!/bin/bash
 
 nft 'add table inet my_table'
-nft 'add chain inet my_table my_chain {type filter hook prerouting priority 0 ; }'
+nft 'add chain inet my_table my_chain {type filter hook postrouting priority 0 ; }'
 
 ## filter for ipv4 and ipv6 packets
 nft 'add rule inet my_table my_chain meta protocol {ip, ip6}'
