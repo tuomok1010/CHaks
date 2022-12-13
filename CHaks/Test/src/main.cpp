@@ -47,6 +47,7 @@ uint32_t EditPacket(PacketCraft::Packet& packet)
     std::cout << "new checksum: " << ntohs(ipv4Header->ip_sum) << std::endl;
 */
 
+    packet.CalculateChecksums();
     return NO_ERROR;
 }
   
