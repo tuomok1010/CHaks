@@ -6,6 +6,75 @@
 #include <unistd.h>
 #include <cstring>
 
+bool32 FilterPacket(const PacketCraft::Packet& packet)
+{
+    std::cout << "in FilterPacket()" << std::endl;
+    IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
+    IPv6Header* ipv6Header = (IPv6Header*)packet.FindLayerByType(PC_IPV6);
+    UDPHeader* udpHeader = (UDPHeader*)packet.FindLayerByType(PC_UDP);
+    DNSHeader* dnsHeader = (DNSHeader*)packet.FindLayerByType(PC_DNS_RESPONSE);
+
+    if(ipv4Header)
+    {
+        if(ipv4Header->ip_p == IPPROTO_UDP)
+        {
+            if(dnsHeader)
+            {
+                
+            }
+        }
+        else if(ipv4Header->ip_p == IPPROTO_TCP)
+        {
+            if(dnsHeader)
+            {
+                if(dnsHeader->qr == 1)
+                {
+                    // TODO: support DNS over TCP
+                    LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
+                    return FALSE;
+                }
+            }
+            else
+            {
+                return FALSE;
+            }
+        }
+    }
+    else if(ipv6Header)
+    {
+        if(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt == IPPROTO_UDP)
+        {
+            if(dnsHeader)
+            {
+                if(dnsHeader->qr == 1)
+                {
+                    // TODO: support IPV6
+                    LOG_ERROR(APPLICATION_ERROR, "IPV6 not supported");
+                    return FALSE;
+                }
+            }
+        }
+        else if(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt == IPPROTO_TCP)
+        {
+            if(dnsHeader)
+            {
+                if(dnsHeader->qr == 1)
+                {
+                    // TODO: support DNS over TCP
+                    LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
+                    return FALSE;
+                }
+            }
+        }
+    }
+}
+
+uint32_t EditPacket(PacketCraft::Packet& packet)
+{
+    std::cout << "in EditPacket()" << std::endl;
+    return NO_ERROR;
+}
+
 void PrintHelp(char** argv)
 {
     std::cout
@@ -81,18 +150,16 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     } 
 
-    CHaks::DNSSpoofer dnsSpoofer;
-    if(dnsSpoofer.Init(domain, targetIP, fakeDomainIP, interfaceName, ipVersion) == APPLICATION_ERROR)
+    PacketCraft::Packet packet;
+    PacketCraft::PacketFilterQueue queue(&packet, queueNum, ipVersion == 4 ? AF_INET : AF_INET6, FilterPacket, EditPacket,
+        PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT);
+
+    if(queue.Run() == APPLICATION_ERROR)
     {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::DNSSpoofer::Init() error");
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::PacketFilterQueue::Run() error!");
         return APPLICATION_ERROR;
     }
 
-    if(dnsSpoofer.Run() == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "CHaks::dnsSpoofer::Run() error");
-        return APPLICATION_ERROR;
-    }
 
     std::cout << std::flush;
     return NO_ERROR;    

@@ -47,7 +47,7 @@ uint32_t EditPacket(PacketCraft::Packet& packet)
     std::cout << "new checksum: " << ntohs(ipv4Header->ip_sum) << std::endl;
 */
 
-    packet.CalculateChecksums();
+    
     return NO_ERROR;
 }
   
@@ -57,9 +57,9 @@ int main(int argc, char** argv)
     int af{AF_INET};
 
     PacketCraft::Packet packet;
-    PacketCraft::PacketFilterQueue packetQueue(packet, queueNum, af, FilterPacket, EditPacket, PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT);
+    PacketCraft::PacketFilterQueue packetQueue(&packet, queueNum, af, FilterPacket, EditPacket, PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT);
 
-    if(packetQueue.Init() == APPLICATION_ERROR)
+    if(packetQueue.Run() == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::PacketFilterQueue::Init() error!");
         return APPLICATION_ERROR;
