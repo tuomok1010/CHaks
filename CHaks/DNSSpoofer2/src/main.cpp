@@ -3,12 +3,21 @@
 #include <iostream>
 
 #include <net/if.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
 
-bool32 FilterPacket(const PacketCraft::Packet& packet)
+struct PacketFuncData
+{
+    char domain[FQDN_MAX_STR_LEN]{};
+    char targetIP[INET6_ADDRSTRLEN]{};
+    char fakeDomainIP[INET6_ADDRSTRLEN]{};
+};
+
+bool32 FilterPacket(const PacketCraft::Packet& packet, void* data)
 {
     std::cout << "in FilterPacket()" << std::endl;
+    PacketFuncData myData = *(PacketFuncData*)data;
     IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
     IPv6Header* ipv6Header = (IPv6Header*)packet.FindLayerByType(PC_IPV6);
     UDPHeader* udpHeader = (UDPHeader*)packet.FindLayerByType(PC_UDP);
@@ -20,19 +29,47 @@ bool32 FilterPacket(const PacketCraft::Packet& packet)
         {
             if(dnsHeader)
             {
-                
+                sockaddr_in targetIP;
+                if(inet_pton(AF_INET, myData.targetIP, &targetIP.sin_addr) <= 0)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "inet_pton() error");
+                    return FALSE;
+                }
+
+                if(ipv4Header->ip_dst.s_addr != targetIP.sin_addr.s_addr)
+                    return FALSE;
+
+                PacketCraft::DNSParser dnsParser;
+                if(dnsParser.Parse(*dnsHeader) == APPLICATION_ERROR)
+                {
+                    LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DNSParser::Parse() error");
+                    return FALSE;
+                }
+
+                for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
+                {
+                    if(PacketCraft::CompareStr(myData.domain, dnsParser.questionsArray[i].qName) == TRUE)
+                    {
+                        for(unsigned int j = 0; j < dnsParser.header.ancount; ++j)
+                        {
+                            if(dnsParser.answersArray[j].aType == 1)
+                            {
+                                std::cout << "Filter success:" << std::endl;
+                                packet.Print();
+                                return TRUE;
+                            }
+                        }
+                    }
+                }
             }
         }
         else if(ipv4Header->ip_p == IPPROTO_TCP)
         {
             if(dnsHeader)
             {
-                if(dnsHeader->qr == 1)
-                {
-                    // TODO: support DNS over TCP
-                    LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
-                    return FALSE;
-                }
+                // TODO: support DNS over TCP
+                LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
+                return FALSE;
             }
             else
             {
@@ -46,30 +83,26 @@ bool32 FilterPacket(const PacketCraft::Packet& packet)
         {
             if(dnsHeader)
             {
-                if(dnsHeader->qr == 1)
-                {
-                    // TODO: support IPV6
-                    LOG_ERROR(APPLICATION_ERROR, "IPV6 not supported");
-                    return FALSE;
-                }
+                // TODO: support IPV6
+                LOG_ERROR(APPLICATION_ERROR, "IPV6 not supported");
+                return FALSE;
             }
         }
         else if(ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_nxt == IPPROTO_TCP)
         {
             if(dnsHeader)
             {
-                if(dnsHeader->qr == 1)
-                {
-                    // TODO: support DNS over TCP
-                    LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
-                    return FALSE;
-                }
+                // TODO: support DNS over TCP
+                LOG_ERROR(APPLICATION_ERROR, "DNS over TCP not supported");
+                return FALSE;
             }
         }
     }
+
+    return FALSE;
 }
 
-uint32_t EditPacket(PacketCraft::Packet& packet)
+uint32_t EditPacket(PacketCraft::Packet& packet, void* data)
 {
     std::cout << "in EditPacket()" << std::endl;
     return NO_ERROR;
@@ -125,11 +158,11 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
     else
         PacketCraft::CopyStr(fakeDomainIP, INET6_ADDRSTRLEN, argv[5]);
 
-
     if(PacketCraft::GetStrLen(argv[6]) > FQDN_MAX_STR_LEN)
         return APPLICATION_ERROR;
     else
         PacketCraft::CopyStr(domain, FQDN_MAX_STR_LEN, argv[6]);
+
 
     return NO_ERROR;
 }
@@ -137,13 +170,11 @@ int ProcessArgs(int argc, char** argv, char* interfaceName, uint32_t& ipVersion,
 int main(int argc, char** argv)
 {
     char interfaceName[IFNAMSIZ]{};
-    char domain[FQDN_MAX_STR_LEN]{};
-    char targetIP[INET6_ADDRSTRLEN]{};
-    char fakeDomainIP[INET6_ADDRSTRLEN]{};
     uint32_t ipVersion{};
     uint32_t queueNum{};
+    PacketFuncData data;
 
-    if(ProcessArgs(argc, argv, interfaceName, ipVersion, queueNum, targetIP, fakeDomainIP, domain) == APPLICATION_ERROR)
+    if(ProcessArgs(argc, argv, interfaceName, ipVersion, queueNum, data.targetIP, data.fakeDomainIP, data.domain) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "ProcessArgs() error!");
         PrintHelp(argv);
@@ -152,7 +183,7 @@ int main(int argc, char** argv)
 
     PacketCraft::Packet packet;
     PacketCraft::PacketFilterQueue queue(&packet, queueNum, ipVersion == 4 ? AF_INET : AF_INET6, FilterPacket, EditPacket,
-        PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT);
+        PacketCraft::PC_ACCEPT, PacketCraft::PC_ACCEPT, &data, &data);
 
     if(queue.Run() == APPLICATION_ERROR)
     {
@@ -160,9 +191,6 @@ int main(int argc, char** argv)
         return APPLICATION_ERROR;
     }
 
-
     std::cout << std::flush;
-    return NO_ERROR;    
-
     return NO_ERROR;    
 }
