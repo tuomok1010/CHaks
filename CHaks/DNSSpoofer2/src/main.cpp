@@ -20,7 +20,6 @@ bool32 FilterPacket(const PacketCraft::Packet& packet, void* data)
     PacketFuncData myData = *(PacketFuncData*)data;
     IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
     IPv6Header* ipv6Header = (IPv6Header*)packet.FindLayerByType(PC_IPV6);
-    UDPHeader* udpHeader = (UDPHeader*)packet.FindLayerByType(PC_UDP);
     DNSHeader* dnsHeader = (DNSHeader*)packet.FindLayerByType(PC_DNS_RESPONSE);
 
     if(ipv4Header)
@@ -54,8 +53,6 @@ bool32 FilterPacket(const PacketCraft::Packet& packet, void* data)
                         {
                             if(dnsParser.answersArray[j].aType == 1)
                             {
-                                std::cout << "Filter success:" << std::endl;
-                                packet.Print();
                                 return TRUE;
                             }
                         }
@@ -104,7 +101,30 @@ bool32 FilterPacket(const PacketCraft::Packet& packet, void* data)
 
 uint32_t EditPacket(PacketCraft::Packet& packet, void* data)
 {
-    std::cout << "in EditPacket()" << std::endl;
+    PacketFuncData myData = *(PacketFuncData*)data;
+    DNSHeader* originalDNS = (DNSHeader*)packet.FindLayerByType(PC_DNS_RESPONSE);
+    int layerIndex = packet.FindIndexByType(PC_DNS_RESPONSE);
+    uint32_t originalDNSSize = packet.GetLayerSize(layerIndex);
+
+    char qNameInDNSFormat[FQDN_MAX_STR_LEN]{};
+    if(PacketCraft::DomainToDNSName(myData.domain, qNameInDNSFormat) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DomainToDNSName() error");
+        return APPLICATION_ERROR;
+    }
+
+    PacketCraft::DNSParser dnsParser;
+    if(dnsParser.Parse(*originalDNS) == APPLICATION_ERROR)
+    {
+        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DNSParser::Parse() error");
+        return FALSE;
+    }
+
+    // adding +1 because the last label length is 0. Apparantly it gets treated as a null terminating character, but we need it included
+    uint32_t qNameLen = PacketCraft::GetStrLen(qNameInDNSFormat) + 1;
+    uint32_t qType = 
+
+
     return NO_ERROR;
 }
 
